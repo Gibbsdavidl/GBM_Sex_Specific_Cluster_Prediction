@@ -1,0 +1,82 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+library(tidyverse)
+library(robencla)
+```
+```{r}
+#setwd("E:/Work/GBM_clusters/Classifier_Workflow")
+arr_m <- read_csv('data/Males_CV_Data_v3.csv')
+#rna_m <- read_csv('data/Males_RNASeq_Data_CW.csv')
+rna_m <- read_csv('data/Males_RNASeq_Data_v3.csv')
+#load('data/Males_feature_sel_genelist.rda')
+load('data/feature_pairs_male_v3_round1.rda')
+```
+
+
+
+```{r}
+# results list
+resl <- list()
+print('starting')
+
+# for a number of iterations, could be more
+for (i in 1:200) {
+
+  idx <- sample(1:nrow(rna_m),size=5,replace = F)
+  sampleidx <- rna_m$sample[idx]
+
+  dfa3 <- arr_m[!(arr_m$sample %in% sampleidx), ]
+  dfb3 <- rna_m[c(idx), ]
+
+  # our classifier object named Anne.
+  anne <- Robencla$new("Anne")
+
+  # xgboost parameters to pass to each sub-classifier in the ensembles
+  params <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+                 eta=0.2,        # this is the learning rate. smaller values slow it down, more conservative   (xgboost parameter)
+                 nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+                 nthreads=5,     # parallel threads
+                 gamma=0.5,      # Minimum loss reduc req'd to again partition a leaf node. higher number ~ more conservative (xgboost parameter)
+                 lambda=1.5,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
+                 alpha=0.5,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+                 verbose=0,
+                 train_perc=0.8,
+                 combine_function='median',
+                 size=11
+  )
+
+  # First we use the training data
+  anne$autotrain(data_frame = dfa3,
+                 label_name='cluster_group',
+                 sample_id = 'sample',
+                 data_mode=c('pairs'),  # pairs,sigpairs,quartiles,tertiles,binary,ranks,original #
+                 pair_list=genelist,  # subset to these genes.
+                 params=params,
+                 verbose=0)
+
+  # now we apply the classifier to a test set.
+  anne$autotest(data_frame = dfb3,#[,colnames(dfa2)], #'data/Males_RNASeq_Data_v3.csv',
+                label_name='cluster_group',
+                sample_id = 'sample',
+                verbose=0)
+
+  #table(Pred=anne$results()$BestCall, True=anne$test_label)
+  resl[[i]] <- data.frame(Round=i, anne$results()$SampleIDs, Pred=anne$results()$BestCall, True=anne$test_label)
+}
+
+resdf <- do.call("rbind", resl)
+table(Pred=resdf$Pred, True=resdf$True)
+
+```
+
+```{r}
+genelist
+```
+
+
+```{r}
+write.table(as.data.frame(resdf), 'results/male_rnaseq_pairs_round3.csv', sep=',', quote = F, row.names = F)
+```

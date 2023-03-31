@@ -1,0 +1,204 @@
+---
+title: "STEP_6_Calibration"
+output: html_document
+date: "2023-03-26"
+---
+
+```{r}
+library(tidyverse)
+```
+
+
+
+```{r}
+### PULLING OUT SOME GENES
+#setwd("E:/Work/GBM_clusters/Classifier_Workflow")
+resdf_f <- read.csv('data/feature_pairs_female_v3.csv')
+dfa_f <- read.csv('data/Females_CV_Data_v3.csv')
+dfb_f <- read.csv('data/Females_RNASeq_Data_v3.csv')
+load('data/Females_feature_sel_genelist.rda')
+
+```
+
+
+
+```{r}
+dfa <- dfa_f[dfa_f$sample %in% dfb_f$sample, ]
+dfb <- dfb_f
+rownames(dfa) <- dfa$sample
+rownames(dfb) <- dfb$sample
+dfa <- dfa[dfb$sample,]
+```
+
+
+```{r}
+table(dfa$cluster.group)
+```
+
+```{r}
+gene <-  'PTCD1' #'SOX11' #  'SEMA5A'  #
+qplot(x=dfa[,gene], y=dfb_f[,gene], color=dfa$cluster.group, ylab='RNA-seq', xlab='Array', main=gene)
+```
+
+
+```{r}
+corrres <- data.frame()
+for(gi in genelist) {
+  res0 <- cor(x=dfa[,gi], y=dfb_m[,gi], method='spearman')
+  corrres <- rbind(corrres, data.frame(Gene=gi, Cor=res0))
+}
+
+qplot(x = 1:nrow(corrres), y=corrres %>% arrange(Cor) %>% select(Cor) %>% pull(), ylab='Correlation, spearmans', xlab='genelist, F')
+```
+
+```{r}
+head(resdf_f)
+
+genesi <- colnames(dfa)[resdf_f$gene_i]
+genesj <- colnames(dfa)[resdf_f$gene_j]
+
+geneicor <- sapply(genesi, function(gi) cor(x=dfa[,gi], y=dfb_f[,gi], method='spearman'))
+genejcor <- sapply(genesj, function(gj) cor(x=dfa[,gj], y=dfb_f[,gj], method='spearman'))
+
+resdf_f$geneicor <- geneicor
+resdf_f$genejcor <- genejcor
+
+head(resdf_f)
+```
+
+
+
+```{r}
+#qplot(x=prop_diff, y=prop_this_cluster,  data=resdf, colour=cluster, alpha=0.5) #  %>% dplyr::filter(cluster=='cluster4')
+
+#CLUSTER1
+resdf_f %>% dplyr::filter(cluster=='cluster1' & geneicor > 0.7 & genejcor > 0.7 & (!gene_i %in% cluster1) & (!gene_j %in% cluster1) ) %>% arrange( desc(abs(dist_ij_cluster))) %>% head(n=20)
+resdf_f %>% dplyr::filter(cluster=='cluster1' & geneicor > 0.7 & genejcor > 0.7  & (!gene_i %in% cluster1) & (!gene_j %in% cluster1)) %>% arrange( desc(abs(prop_diff))) %>% head(n=10)
+##CLUSTER2
+resdf_f %>% dplyr::filter(cluster=='cluster2' & geneicor > 0.70 & genejcor > 0.7 & (!gene_i %in% cluster2) & (!gene_j %in% cluster2) ) %>% arrange( desc(abs(dist_ij_cluster))) %>% head(10)
+resdf_f %>% dplyr::filter(cluster=='cluster2' & geneicor > 0.71 & genejcor > 0.71 & (!gene_i %in% cluster2) & (!gene_j %in% cluster2) ) %>% arrange( desc(abs(prop_diff))) %>% head(10)
+#CLUSTER3
+resdf_f %>% dplyr::filter(cluster=='cluster3' & geneicor > 0.75 & genejcor > 0.75 & (!gene_i %in% cluster3) & (!gene_j %in% cluster3) ) %>% arrange( desc(abs(dist_ij_cluster))) %>% head(n=10)
+resdf_f %>% dplyr::filter(cluster=='cluster3' & geneicor > 0.75 & genejcor > 0.75 & (!gene_i %in% cluster3) & (!gene_j %in% cluster3) ) %>% arrange( desc(abs(prop_diff))) %>% head(n=20)
+#CLUSTER4
+resdf_f %>% dplyr::filter(cluster=='cluster4' & geneicor > 0.70 & genejcor > 0.70 & (!gene_i %in% cluster4) & (!gene_j %in% cluster4) ) %>% arrange( desc(abs(dist_ij_cluster))) %>% head(n=15)
+resdf_f %>% dplyr::filter(cluster=='cluster4' & geneicor > 0.70 & genejcor > 0.70 & (!gene_i %in% cluster4) & (!gene_j %in% cluster4) ) %>% arrange( desc(abs(prop_diff))) %>% head(n=15)
+#CLUSTER5
+resdf_f %>% dplyr::filter(cluster=='cluster5' & geneicor > 0.400 & genejcor > 0.400 & (!gene_i %in% cluster5) & (!gene_j %in% cluster5) ) %>% arrange( desc(abs(dist_ij_cluster))) %>% head(n=20)
+resdf_f %>% dplyr::filter(cluster=='cluster5' & geneicor > 0.40 & genejcor > 0.40 & (!gene_i %in% cluster5) & (!gene_j %in% cluster5) ) %>% arrange( desc(abs(prop_diff))) %>% head(n=20)
+
+cluster1 <- c(338,2906,4401,7245,880,10074,2242,4229,4584,10000,3803,9221,3803,8755	)
+cluster2 <- c(1818,5179,4946,7092,47,5458,5204,9467,8842,9083,1846,4145)
+cluster3 <- c(5744,8212,1019,1576,5513,5744,1655,5130,1331,3299,3056,7165,5172,8915,6156,9732,8754,10229,4401,9688)
+cluster4 <- c(4383,7092,7736,8077,3359,9422,4630,8575,7736,8077,3052,4383)
+cluster5 <- c(4162,9898,7537,8833,1786,6066)
+
+genelist <- c()
+
+genelist <-  (c(
+  colnames(dfa_f)[cluster1],
+  colnames(dfa_f)[cluster2],
+  colnames(dfa_f)[cluster3],
+  colnames(dfa_f)[cluster4],
+  colnames(dfa_f)[cluster5]
+))
+
+save(genelist, file='data/feature_pairs_female_v3_round3.rda')
+```
+
+
+
+
+```{r}
+### PULLING OUT SOME GENES
+#setwd("E:/Work/GBM_clusters/Classifier_Workflow")
+resdf_m <- read.csv('data/feature_pairs_males_v3.csv')
+dfa_m <- read.csv('data/Males_CV_Data_v3.csv')
+dfb_m <- read.csv('data/Males_RNASeq_Data_v3.csv')
+#load('data/Males_feature_sel_genelist.rda')
+
+```
+
+
+
+```{r}
+dfa <- dfa_m[dfa_m$sample %in% dfb_m$sample, ]
+dfb <- dfb_m
+rownames(dfa) <- dfa$sample
+rownames(dfb) <- dfb$sample
+dfa <- dfa[dfb$sample,]
+```
+
+
+```{r}
+table(dfa$cluster.group)
+```
+
+
+```{r}
+head(resdf_m)
+
+genesi <- colnames(dfa)[resdf_m$gene_i]
+genesj <- colnames(dfa)[resdf_m$gene_j]
+
+geneicor <- sapply(genesi, function(gi) cor(x=dfa[,gi], y=dfb[,gi], method='spearman'))
+genejcor <- sapply(genesj, function(gj) cor(x=dfa[,gj], y=dfb[,gj], method='spearman'))
+
+resdf_m$geneicor <- geneicor
+resdf_m$genejcor <- genejcor
+
+head(resdf_m)
+```
+
+
+```{r}
+#qplot(x=prop_diff, y=prop_this_cluster,  data=resdf, colour=cluster, alpha=0.5) #  %>% dplyr::filter(cluster=='cluster4')
+
+#CLUSTER1
+resdf_m %>% dplyr::filter(cluster=='cluster1' & geneicor > 0.7 & genejcor > 0.7 & (!gene_i %in% cluster1) & (!gene_j %in% cluster1) ) %>% arrange( desc(abs(dist_ij_cluster))) %>% head(n=20)
+resdf_m %>% dplyr::filter(cluster=='cluster1' & geneicor > 0.7 & genejcor > 0.7  & (!gene_i %in% cluster1) & (!gene_j %in% cluster1)) %>% arrange( desc(abs(prop_diff))) %>% head(n=10)
+##CLUSTER2
+resdf_m %>% dplyr::filter(cluster=='cluster2' & geneicor > 0.40 & genejcor > 0.4 & (!gene_i %in% cluster2) & (!gene_j %in% cluster2) ) %>% arrange( desc(abs(dist_ij_cluster))) %>% head(10)
+resdf_m %>% dplyr::filter(cluster=='cluster2' & geneicor > 0.41 & genejcor > 0.41 & (!gene_i %in% cluster2) & (!gene_j %in% cluster2) ) %>% arrange( desc(abs(prop_diff))) %>% head(10)
+#CLUSTER3
+resdf_m %>% dplyr::filter(cluster=='cluster3' & geneicor > 0.75 & genejcor > 0.75 & (!gene_i %in% cluster3) & (!gene_j %in% cluster3) ) %>% arrange( desc(abs(dist_ij_cluster))) %>% head(n=10)
+resdf_m %>% dplyr::filter(cluster=='cluster3' & geneicor > 0.75 & genejcor > 0.75 & (!gene_i %in% cluster3) & (!gene_j %in% cluster3) ) %>% arrange( desc(abs(prop_diff))) %>% head(n=20)
+#CLUSTER4
+resdf_m %>% dplyr::filter(cluster=='cluster4' & geneicor > 0.60 & genejcor > 0.60 & (!gene_i %in% cluster4) & (!gene_j %in% cluster4) ) %>% arrange( desc(abs(dist_ij_cluster))) %>% head(n=15)
+resdf_m %>% dplyr::filter(cluster=='cluster4' & geneicor > 0.60 & genejcor > 0.60 & (!gene_i %in% cluster4) & (!gene_j %in% cluster4) ) %>% arrange( desc(abs(prop_diff))) %>% head(n=15)
+#CLUSTER5
+resdf_m %>% dplyr::filter(cluster=='cluster5' & geneicor > 0.400 & genejcor > 0.400 & (!gene_i %in% cluster5) & (!gene_j %in% cluster5) ) %>% arrange( desc(abs(dist_ij_cluster))) %>% head(n=20)
+resdf_m %>% dplyr::filter(cluster=='cluster5' & geneicor > 0.40 & genejcor > 0.40 & (!gene_i %in% cluster5) & (!gene_j %in% cluster5) ) %>% arrange( desc(abs(prop_diff))) %>% head(n=20)
+
+resdf_m %>% filter(gene_i == 3297 & gene_j == 9746)
+
+cluster1 <- c(8382,9646,2549,5383,  7679,10210,  3297,9746,3746,10000,6903,9145)
+cluster2 <- c(6684,9747,6403,8092,6491,6526,1715,8324,6903,9145,2825,6717)
+cluster3 <- c(6532,9239,711,5591,3013,5591,1818,1905,556,3036,66,1819,4899,10253)
+cluster4 <- c(8511,9543,353,3898,2862,6273,1516,8432,1078,2618,2,3310,565,1395)
+cluster5 <- c(664,3169,3690,4351,9536,10089,4768,6976,5568,10102,5549,5568,3734,6249)
+
+# edit from earlier selection.
+cluster1 <- c(3575,9646,2437,3575,5683,9725,7907,9145,9717,9749,2549,5383)
+cluster2 <- c(6684,9747,6403,8092,2825,6717,2825,6717,6403,8092)
+cluster3 <- c(2825,6532,556,4376,6532,10253,556,1013,4787,5661,711,5591,1818,1905)
+cluster4 <- c(760,4638,1760,3489,3489,6061,8710,10057,128,232)
+cluster5 <- c(424,664,664,3169,4351,7775,5568,10102,3538,5568,4351,9320,9536,10089)
+
+
+genelist <-  c(
+  colnames(arr_m)[cluster1],
+  colnames(arr_m)[cluster2],
+  colnames(arr_m)[cluster3],
+  colnames(arr_m)[cluster4],
+  colnames(arr_m)[cluster5]
+)
+
+save(genelist, file='data/feature_pairs_male_v3_round3.rda')
+```
+
+
+
+
+
+

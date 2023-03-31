@@ -1,0 +1,219 @@
+---
+title: An R Markdown document converted from "STEP_3_Feature_Selection_Processing_V3.ipynb"
+output: html_document
+---
+
+```{r}
+#devtools::install_github("gibbsdavidl/robencla", force = F)
+```
+
+```{r}
+library(tidyverse)
+library(robencla)
+```
+
+```{r}
+### PULLING OUT SOME GENES
+setwd("E:/Work/GBM_clusters/Classifier_Workflow")
+resdf <- read.csv('data/feature_pairs_males_v3.csv')
+dfa <- read.csv('data/Males_CV_Data_v3.csv')
+```
+
+```{r}
+dim(dfa)
+```
+```{r}
+
+#qplot(x=prop_diff, y=prop_this_cluster,  data=resdf, colour=cluster, alpha=0.5) #  %>% dplyr::filter(cluster=='cluster4')
+
+#CLUSTER1
+resdf %>% dplyr::filter(cluster=='cluster1') %>% arrange( desc(abs(dist_ij_cluster))) %>% head(n=20)
+resdf %>% dplyr::filter(cluster=='cluster1') %>% arrange( desc(abs(prop_diff))) %>% head(n=20)
+##CLUSTER2
+resdf %>% dplyr::filter(cluster=='cluster2') %>% arrange( desc(abs(dist_ij_cluster))) %>% head()
+resdf %>% dplyr::filter(cluster=='cluster2') %>% arrange( desc(abs(prop_diff))) %>% head()
+#CLUSTER3
+resdf %>% dplyr::filter(cluster=='cluster3') %>% arrange( desc(abs(dist_ij_cluster))) %>% head(n=10)
+resdf %>% dplyr::filter(cluster=='cluster3') %>% arrange( desc(abs(prop_diff))) %>% head(n=10)
+#CLUSTER4
+resdf %>% dplyr::filter(cluster=='cluster4') %>% arrange( desc(abs(dist_ij_cluster))) %>% head(n=15)
+resdf %>% dplyr::filter(cluster=='cluster4') %>% arrange( desc(abs(prop_diff))) %>% head(n=15)
+#CLUSTER5
+resdf %>% dplyr::filter(cluster=='cluster5') %>% arrange( desc(abs(dist_ij_cluster))) %>% head(n=20)
+resdf %>% dplyr::filter(cluster=='cluster5') %>% arrange( desc(abs(prop_diff))) %>% head(n=20)
+
+cluster1 <- c(3575,9646,2437,3575,5683,9725,7907,9145,9717,9749)
+cluster2 <- c(6684,9747,6403,8092,2825,6717,2825,6717,6403,8092)
+cluster3 <- c(2825,6532,556,4376,6532,10253,556,1013,4787,5661)
+cluster4 <- c(760,4638,1760,3489,3489,6061,8710,10057,128,232)
+cluster5 <- c(424,664,664,3169,4351,7775,5568,10102,3538,5568,4351,9320,9536,10089)
+
+genelist <- c()
+
+genelist <-  (c(
+  colnames(dfa)[cluster1],
+  colnames(dfa)[cluster2],
+  colnames(dfa)[cluster3],
+  colnames(dfa)[cluster4],
+  colnames(dfa)[cluster5]
+))
+```
+
+
+
+
+
+```{r}
+topn <- 2
+
+clusters <- c('cluster1','cluster2','cluster3','cluster4','cluster5')
+
+idxlist <- c()
+
+for (ci in clusters) {    
+    # first sorted by distance between
+    x1 <- resdf %>% dplyr::filter(cluster==ci) %>% arrange( desc(abs(dist_ij_cluster))) %>% head(n=topn) %>% select('gene_i') %>% as_vector()
+    x2 <- resdf %>% dplyr::filter(cluster==ci) %>% arrange( desc(abs(dist_ij_cluster))) %>% head(n=topn) %>% select('gene_j') %>% as_vector()
+    # then sorted by max proportion difference
+    x3 <- resdf %>% dplyr::filter(cluster==ci) %>% arrange( desc(abs(prop_diff))) %>% head(n=topn) %>% select('gene_i') %>% as_vector()
+    x4 <- resdf %>% dplyr::filter(cluster==ci) %>% arrange( desc(abs(prop_diff))) %>% head(n=topn) %>% select('gene_j') %>% as_vector()
+    for (i in 1:topn) {
+        if (x1[i] == x3[i] && x2[i] == x4[i]) {
+            print("WARNING DUPS")
+            print(c(x1[i],x2[i],x3[i],x4[i]))
+            idxlist <- c(idxlist, c(x1[i],x2[i],x3[i],x4[i]))
+        } else {
+            idxlist <- c(idxlist, c(x1[i],x2[i],x3[i],x4[i]))
+        }
+    }
+}
+    
+genelist <- colnames(dfa)[idxlist]
+```
+
+```{r}
+genelist
+```
+
+```{r}
+save(genelist, file='data/Males_feature_sel_genelist.rda')
+```
+
+
+```{r}
+
+genelist <- colnames(dfa)[c(6403,8092)]
+geneA <- genelist[1]
+geneB <- genelist[2]
+
+v1 <- dfa[dfa$cluster.group == 'cluster2', geneA]
+v2 <- dfa[dfa$cluster.group == 'cluster2', geneB]
+v3 <- dfa[dfa$cluster.group != 'cluster2', geneA]
+v4 <- dfa[dfa$cluster.group != 'cluster2', geneB]
+
+boxplot(list(C1_A=v1,C1_B=v2, notC1_A=v3, notC1_B=v4))
+```
+
+```{r}
+### PULLING OUT SOME GENES
+setwd("E:/Work/GBM_clusters/Classifier_Workflow")
+resdf_f <- read.csv('data/feature_pairs_female_v3.csv')
+dfa_f <- read.csv('data/Females_CV_Data_v3.csv')
+```
+
+```{r}
+head(resdf_f)
+```
+
+```{r}
+
+topn <- 2
+
+clusters <- c('cluster1','cluster2','cluster3','cluster4','cluster5')
+
+idxlist <- c()
+
+for (ci in clusters) {    
+    # first sorted by distance between
+    x1 <- resdf_f %>% dplyr::filter(cluster==ci) %>% arrange( desc(abs(dist_ij_cluster))) %>% head(n=topn) %>% select('gene_i') %>% as_vector()
+    x2 <- resdf_f %>% dplyr::filter(cluster==ci) %>% arrange( desc(abs(dist_ij_cluster))) %>% head(n=topn) %>% select('gene_j') %>% as_vector()
+    # then sorted by max proportion difference
+    x3 <- resdf_f %>% dplyr::filter(cluster==ci) %>% arrange( desc(abs(prop_diff))) %>% head(n=topn) %>% select('gene_i') %>% as_vector()
+    x4 <- resdf_f %>% dplyr::filter(cluster==ci) %>% arrange( desc(abs(prop_diff))) %>% head(n=topn) %>% select('gene_j') %>% as_vector()
+    for (i in 1:topn) {
+        if (x1[i] == x3[i] && x2[i] == x4[i]) {
+            print("WARNING DUPS")
+            print(c(x1[i],x2[i],x3[i],x4[i]))
+            idxlist <- c(idxlist, c(x1[i],x2[i],x3[i],x4[i]))
+        } else {
+            idxlist <- c(idxlist, c(x1[i],x2[i],x3[i],x4[i]))
+        }
+    }
+}
+    
+genelist <- colnames(dfa)[idxlist]
+```
+
+
+
+```{r}
+
+
+#qplot(x=prop_diff, y=prop_this_cluster,  data=resdf, colour=cluster, alpha=0.5) #  %>% dplyr::filter(cluster=='cluster4')
+
+#CLUSTER1
+resdf_f %>% dplyr::filter(cluster=='cluster1') %>% arrange( desc(abs(dist_ij_cluster))) %>% head(n=20)
+resdf_f %>% dplyr::filter(cluster=='cluster1') %>% arrange( desc(abs(prop_diff))) %>% head(n=20)
+##CLUSTER2
+resdf_f %>% dplyr::filter(cluster=='cluster2') %>% arrange( desc(abs(dist_ij_cluster))) %>% head()
+resdf_f %>% dplyr::filter(cluster=='cluster2') %>% arrange( desc(abs(prop_diff))) %>% head()
+#CLUSTER3
+resdf_f %>% dplyr::filter(cluster=='cluster3') %>% arrange( desc(abs(dist_ij_cluster))) %>% head(n=20)
+resdf_f %>% dplyr::filter(cluster=='cluster3') %>% arrange( desc(abs(prop_diff))) %>% head(n=20)
+#CLUSTER4
+resdf_f %>% dplyr::filter(cluster=='cluster4') %>% arrange( desc(abs(dist_ij_cluster))) %>% head(n=15)
+resdf_f %>% dplyr::filter(cluster=='cluster4') %>% arrange( desc(abs(prop_diff))) %>% head(n=15)
+#CLUSTER5
+resdf_f %>% dplyr::filter(cluster=='cluster5') %>% arrange( desc(abs(dist_ij_cluster))) %>% head(n=20)
+resdf_f %>% dplyr::filter(cluster=='cluster5') %>% arrange( desc(abs(prop_diff))) %>% head(n=20)
+
+cluster1 <- c(7113,7308,338,2906,3803,8755,899,9898)
+cluster2 <- c(8197,9198,3108,9083,5684,9083,1074,5283)
+cluster3 <- c(1883,8212,8212,10000,625,844,844,1704)
+cluster4 <- c(4630,8575,4437,8077,4099,8977,3371,9240)
+cluster5 <- c(1884,7537,7537,8833,4162,9898,1786,6066)
+
+genelist <- c()
+
+genelist <-  (c(
+  colnames(dfa_f)[cluster1],
+  colnames(dfa_f)[cluster2],
+  colnames(dfa_f)[cluster3],
+  colnames(dfa_f)[cluster4],
+  colnames(dfa_f)[cluster5]
+))
+```
+
+
+
+
+```{r}
+genelist
+```
+
+```{r}
+geneA <- genelist[3]
+geneB <- genelist[4]
+
+v1 <- dfa[dfa$cluster.group == 'cluster1', geneA]
+v2 <- dfa[dfa$cluster.group == 'cluster1', geneB]
+v3 <- dfa[dfa$cluster.group != 'cluster1', geneA]
+v4 <- dfa[dfa$cluster.group != 'cluster1', geneB]
+
+boxplot(list(C1_A=v1,C1_B=v2, notC1_A=v3, notC1_B=v4))
+```
+
+```{r}
+save(genelist, file='data/Females_feature_sel_genelist.rda')
+```
+

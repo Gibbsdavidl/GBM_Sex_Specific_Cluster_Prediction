@@ -1,0 +1,10 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+resdf <- read.csv('../data/feature_pairs_males_v3.csv')
+```
+

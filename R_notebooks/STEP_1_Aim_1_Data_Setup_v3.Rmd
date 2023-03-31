@@ -1,0 +1,221 @@
+---
+title: An R Markdown document converted from "STEP_1_Aim_1_Data_Setup_v3.ipynb"
+output: html_document
+---
+
+```{r}
+# data prep #
+#install.packages('rstatix')
+```
+
+```{r}
+library(tidyverse)
+library(bigrquery)
+library(rstatix)
+# bq_auth(use_oob = TRUE, cache = FALSE)
+```
+
+```{r}
+## JIVE Paper Information
+
+# Male IDs
+male.jive.id.raw <- openxlsx::read.xlsx("data/aao5253_tables_s1_to_s12.xlsx", sheet = "Supplemental Table 2", colNames = F, rows = 5:10)
+male.jive.id.list <- reshape2::melt(male.jive.id.raw[,-2], id = "X1") %>% rename(cluster.group = X1) %>% select(-variable) %>% filter(!is.na(value)) %>% arrange(cluster.group)
+
+# Female IDs
+female.jive.id.raw <- openxlsx::read.xlsx("data/aao5253_tables_s1_to_s12.xlsx", sheet = "Supplemental Table 2", colNames = F, rows = 21:25)
+female.jive.id.list <- reshape2::melt(female.jive.id.raw[,-2], id = "X1") %>% rename(cluster.group = X1) %>% select(-variable) %>% filter(!is.na(value)) %>% arrange(cluster.group)
+
+# Male Gene List
+male.jive.gene.raw <- openxlsx::read.xlsx("data/aao5253_tables_s1_to_s12.xlsx", sheet = "Supplemental Table 2", colNames = F, rows = 12:16)
+male.jive.gene.list <- reshape2::melt(male.jive.gene.raw[,-2], id = "X1") %>% rename(cluster.group = X1) %>% select(-variable) %>% filter(!is.na(value)) %>% arrange(cluster.group)
+
+# Female Gene List
+female.jive.gene.raw <- openxlsx::read.xlsx("data/aao5253_tables_s1_to_s12.xlsx", sheet = "Supplemental Table 2", colNames = F, rows = 28:32)
+female.jive.gene.list <- reshape2::melt(female.jive.gene.raw[,-2], id = "X1") %>% rename(cluster.group = X1) %>% select(-variable) %>% filter(!is.na(value)) %>% arrange(cluster.group)
+```
+
+```{r}
+# Filtering genes to those that code proteins
+gene_table <- read_table('data/ncbi_gene_table_dec272022.tsv')
+prot_coding <- gene_table %>% dplyr::filter(Gene_Type == 'PROTEIN_CODING')
+```
+
+```{r}
+## Array data for training
+
+array.raw <- read_tsv('data/raw/TCGA.GBM.sampleMap_HT_HG-U133A.tsv.gz', show_col_types = FALSE)
+array.raw.2 <- as.data.frame(t(array.raw))
+array.data <- array.raw.2 %>% tibble::rownames_to_column("sample") %>% janitor::row_to_names(row_number = 1)
+array.data[,2:(ncol(array.data))] <- lapply(array.data[,2:(ncol(array.data))],as.numeric)
+
+dim(array.data)
+```
+
+```{r}
+## TCGA Query
+TCGA <- "
+    SELECT gexp.case_id, gexp.gene_name, clin.demo__gender, clin.demo__vital_status, clin.demo__days_to_death, clin.diag__age_at_diagnosis,clin.demo__race,clin.demo__ethnicity,
+    AVG( LOG10(gexp.fpkm_uq_unstranded +1 ) ) as gene_exp
+    FROM gbm-gender.tcga_gbm.rnaseq_gencode36_hg38 as gexp
+    JOIN isb-cgc-bq.TCGA_versioned.clinical_gdc_r31 as clin
+    ON gexp.case_id = clin.submitter_id
+    WHERE gexp.sample_type = 'Primary Tumor'
+        AND gene_type = 'protein_coding'
+        AND primary_site = 'Brain'
+    GROUP BY gexp.case_id, gene_name, clin.demo__gender, clin.diag__age_at_diagnosis,demo__race,clin.demo__ethnicity, clin.demo__vital_status,clin.submitter_id, 
+             clin.demo__days_to_death, clin.diag__days_to_last_follow_up,clin.exp__created_datetime
+    "
+```
+
+```{r}
+tcga.import <- bq_project_query ('gbm-gender', query = TCGA) #Put data in temporary BQ table
+tcga_dwnld<- bq_table_download(tcga.import) #Put data into a dataframe
+
+rnaseq.data<-tcga_dwnld %>% 
+     pivot_wider(id_cols = case_id, names_from = gene_name, values_from = gene_exp) %>% rename(sample = case_id)
+```
+
+```{r}
+# TEMPUS DATA
+TEMPUS <- "
+    SELECT gexp.case_id, clin.Sex, clin.Age_at_Diagnosis, clin.survival_status, clin.Survival_days, gexp.gene_name, AVG( LOG10(gexp.fpkm_uq_unstranded +1 ) ) as gene_exp
+        FROM `tempus_group_level.rnaseq_gencode36_hg38` as gexp
+        JOIN `tempus_group_level.clin` as clin
+        ON gexp.case_id = clin.Subject_ID
+            AND gexp.gene_type = 'protein_coding'
+    GROUP BY case_id, gene_name, clin.Sex, clin.Age_at_Diagnosis, clin.survival_status, clin.Survival_days"
+
+tempus.import <- bq_project_query ('gbm-gender', query = TEMPUS) #Put data in temporary BQ table
+
+tempus_dwnld<- bq_table_download(tempus.import) #Put data into a dataframe
+
+write.table(tempus_dwnld, file = 'data/tempus_dwnld.csv', quote = F, row.names = F, sep = ',')
+```
+
+```{r}
+### Preprocessing RNA-seq data
+### remove columns of all zeros
+idx <- which( apply( as.matrix(rnaseq.data[,2:ncol(rnaseq.data)]), 2, sum, na.rm=TRUE) > 0 )
+rnaseq.data <- rnaseq.data[, c(1, idx+1)]
+
+### remove columns with zero variance
+jdx <- which( apply(as.matrix(rnaseq.data[,2:ncol(rnaseq.data)]), 2, var, na.rm=TRUE) > 0 )
+rnaseq.data <- rnaseq.data[, c(1,jdx+1)]
+```
+
+```{r}
+## Tempus Data Preprocessing
+tempus_dwnld<- read.csv(file = 'data/tempus_dwnld.csv', stringsAsFactors = F, header = T)
+
+tempus_males <-tempus_dwnld %>% filter(Sex == "male") %>%
+     pivot_wider(id_cols = case_id, names_from = gene_name, values_from = gene_exp) %>% rename(sample = case_id)
+
+tempus_females <-tempus_dwnld %>% filter(Sex == "female") %>%
+     pivot_wider(id_cols = case_id, names_from = gene_name, values_from = gene_exp) %>% rename(sample = case_id)
+
+dim(tempus_males)
+dim(tempus_females)
+```
+
+```{r}
+# matching up genes between our data types
+col_intersection <- intersect(colnames(rnaseq.data),prot_coding$Symbol)
+col_intersection <- intersect(colnames(rnaseq.data),colnames(array.data)) #### this orginally said intersect(colnames(rnaseq.data),colnames(array.data))
+col_intersection <- intersect(col_intersection,colnames(tempus_males))
+# col_intersection <- c('sample',col_intersection)                              
+```
+
+```{r}
+col_intersection[1:10]
+```
+
+```{r}
+# matching up genes between our data types
+array.data <- array.data[,col_intersection]
+rnaseq.data <- rnaseq.data[,col_intersection]
+tempus_males <- tempus_males[,col_intersection]
+tempus_females <- tempus_females[,col_intersection]
+
+dim(array.data)
+dim(rnaseq.data)
+dim(tempus_males)
+dim(tempus_females)
+```
+
+```{r}
+# Array data processing #
+```
+
+```{r}
+tgca.array.jive <- array.data[array.data$sample %in% c(male.jive.id.list$value,female.jive.id.list$value),]
+
+train.m <- tgca.array.jive %>% inner_join(. , male.jive.id.list, by = c("sample" = "value"))
+
+train.f <- tgca.array.jive %>% inner_join(. , female.jive.id.list, by = c("sample" = "value"))
+```
+
+```{r}
+dim(train.m)
+dim(train.f)
+```
+
+```{r}
+# Male data
+saveRDS(male.jive.gene.list, "data/Males_jive_cluster_genes_v3_GC.rds")
+write.csv(train.m,"data/Males_CV_Data_v3_GC.csv",row.names=F)
+
+# Female data
+saveRDS(female.jive.gene.list, "data/Female_jive_cluster_genes_v3_GC.rds")
+write.csv(train.f,"data/Females_CV_Data_v3_GC.csv",row.names=F)
+```
+
+```{r}
+## Processing the TEMPUS data ##
+```
+
+```{r}
+tempus.m.test <- tempus_males[,names(tempus_males) %in% names(train.m)]
+tempus.f.test <- tempus_females[,names(tempus_females) %in% names(train.f)]
+
+tcga.tempus.jive.m <- tempus.m.test[tempus.m.test$sample %in% c(male.jive.id.list$value),]
+tcga.tempus.jive.f <- tempus.f.test[tempus.f.test$sample %in% c(female.jive.id.list$value),]
+
+tcga.tempus.jive.m[,2:(ncol(tcga.tempus.jive.m))] <- lapply(tcga.tempus.jive.m[,2:(ncol(tcga.tempus.jive.m))],as.numeric)
+tcga.tempus.jive.f[,2:(ncol(tcga.tempus.jive.f))] <- lapply(tcga.tempus.jive.f[,2:(ncol(tcga.tempus.jive.f))],as.numeric)
+
+train.m <- tcga.tempus.jive.m %>% inner_join(. , male.jive.id.list, by = c("sample" = "value"))
+train.f <- tcga.tempus.jive.f %>% inner_join(. , female.jive.id.list, by = c("sample" = "value"))  ### was tgca.rnaseq.jive.f
+```
+
+```{r}
+tempus.m.test$cluster.group <- NA
+write.csv(tempus.m.test,"data/Males_Tempus_Test_v3_GC.csv",row.names=F)
+
+tempus.f.test$cluster.group <- NA
+write.csv(tempus.f.test,"data/Females_Tempus_Test_v3_GC.csv",row.names=F)
+```
+
+```{r}
+# processing the RNA-seq data #
+tgca.rnaseq.jive <- rnaseq.data[rnaseq.data$sample %in% c(male.jive.id.list$value,female.jive.id.list$value),]
+
+rnaseq.m <- tgca.rnaseq.jive %>% inner_join(. , male.jive.id.list, by = c("sample" = "value"))
+
+rnaseq.f <- tgca.rnaseq.jive %>% inner_join(. , female.jive.id.list, by = c("sample" = "value"))
+```
+
+```{r}
+dim(rnaseq.m)
+dim(rnaseq.f)
+```
+
+```{r}
+write.csv(train.m,"data/Males_RNASeq_Data_v3_GC.csv",row.names=F)
+write.csv(train.f,"data/Females_RNASeq_Data_v3_GC.csv",row.names=F)
+```
+
+```{r}
+# DONE
+```
+
