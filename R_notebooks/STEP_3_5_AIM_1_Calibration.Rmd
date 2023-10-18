@@ -6,6 +6,7 @@ date: "2023-03-26"
 
 ```{r}
 library(tidyverse)
+library(hexbin)
 ```
 
 
@@ -13,10 +14,18 @@ library(tidyverse)
 ```{r}
 ### PULLING OUT SOME GENES
 #setwd("E:/Work/GBM_clusters/Classifier_Workflow")
-resdf_f <- read.csv('data/feature_pairs_female_v3.csv')
-dfa_f <- read.csv('data/Females_CV_Data_v3.csv')
-dfb_f <- read.csv('data/Females_RNASeq_Data_v3.csv')
-load('data/Females_feature_sel_genelist.rda')
+resdf_f <- read.csv('../../data/feature_pairs_female_v3.csv')
+dfa_f <- read.csv('../../data/Females_CV_Data_v3.csv')
+dfb_f <- read.csv('../../data/Females_RNASeq_Data_v3.csv')
+load('../../data/Females_feature_sel_genelist.rda')
+
+```
+
+
+```{r}
+cluster1pairs <- resdf_f[resdf_f$cluster == 'cluster1',]
+
+plot(hexbin(x=resdf_f$prop_diff, y=resdf_f$dist_ij_cluster), xlab="Proportion difference", ylab="Intra-cluster distance")
 
 ```
 
@@ -36,8 +45,8 @@ table(dfa$cluster.group)
 ```
 
 ```{r}
-gene <-  'PTCD1' #'SOX11' #  'SEMA5A'  #
-qplot(x=dfa[,gene], y=dfb_f[,gene], color=dfa$cluster.group, ylab='RNA-seq', xlab='Array', main=gene)
+gene <-  'DCX' #'SOX11' #  'SEMA5A'  # PTCD1  LPIN1
+qplot(x=dfa[,gene], y=dfb[,gene], color=dfa$cluster.group, ylab='RNA-seq', xlab='Array', main=gene)
 ```
 
 
@@ -93,17 +102,16 @@ cluster3 <- c(5744,8212,1019,1576,5513,5744,1655,5130,1331,3299,3056,7165,5172,8
 cluster4 <- c(4383,7092,7736,8077,3359,9422,4630,8575,7736,8077,3052,4383)
 cluster5 <- c(4162,9898,7537,8833,1786,6066)
 
-genelist <- c()
 
-genelist <-  (c(
-  colnames(dfa_f)[cluster1],
-  colnames(dfa_f)[cluster2],
-  colnames(dfa_f)[cluster3],
-  colnames(dfa_f)[cluster4],
-  colnames(dfa_f)[cluster5]
-))
+genelist <-  list(
+  'cluster1'=colnames(dfa_f)[cluster1],
+  'cluster2'=colnames(dfa_f)[cluster2],
+  'cluster3'=colnames(dfa_f)[cluster3],
+  'cluster4'=colnames(dfa_f)[cluster4],
+  'cluster5'=colnames(dfa_f)[cluster5]
+)
 
-save(genelist, file='data/feature_pairs_female_v3_round3.rda')
+save(genelist, file='../../data/feature_pairs_female_v3_named_pairlist.rda')
 ```
 
 
@@ -112,9 +120,9 @@ save(genelist, file='data/feature_pairs_female_v3_round3.rda')
 ```{r}
 ### PULLING OUT SOME GENES
 #setwd("E:/Work/GBM_clusters/Classifier_Workflow")
-resdf_m <- read.csv('data/feature_pairs_males_v3.csv')
-dfa_m <- read.csv('data/Males_CV_Data_v3.csv')
-dfb_m <- read.csv('data/Males_RNASeq_Data_v3.csv')
+resdf_m <- read_csv('../../data/feature_pairs_males_v3.csv')
+dfa_m <- read_csv('../../data/Males_CV_Data_v3.csv')
+dfb_m <- read_csv('../../data/Males_RNASeq_Data_v3.csv')
 #load('data/Males_feature_sel_genelist.rda')
 
 ```
@@ -132,6 +140,12 @@ dfa <- dfa[dfb$sample,]
 
 ```{r}
 table(dfa$cluster.group)
+```
+
+
+```{r}
+gene <-  'SOX11' #'SOX11' #  'SEMA5A'  # PTCD1  LPIN1
+qplot(x=dfa[,gene], y=dfb[,gene], color=dfa$cluster.group, ylab='RNA-seq', xlab='Array', main=gene)
 ```
 
 
@@ -186,15 +200,17 @@ cluster4 <- c(760,4638,1760,3489,3489,6061,8710,10057,128,232)
 cluster5 <- c(424,664,664,3169,4351,7775,5568,10102,3538,5568,4351,9320,9536,10089)
 
 
-genelist <-  c(
-  colnames(arr_m)[cluster1],
-  colnames(arr_m)[cluster2],
-  colnames(arr_m)[cluster3],
-  colnames(arr_m)[cluster4],
-  colnames(arr_m)[cluster5]
+
+genelist <-  list(
+  'cluster1'=colnames(dfa_m)[cluster1],
+  'cluster2'=colnames(dfa_m)[cluster2],
+  'cluster3'=colnames(dfa_m)[cluster3],
+  'cluster4'=colnames(dfa_m)[cluster4],
+  'cluster5'=colnames(dfa_m)[cluster5]
 )
 
-save(genelist, file='data/feature_pairs_male_v3_round3.rda')
+
+save(genelist, file='../../data/feature_pairs_male_v3_named_pairlist.rda')
 ```
 
 

@@ -21,12 +21,13 @@ library(tidyverse)
 library(robencla)
 ```
 
+
 ```{r}
-dat.m <- read_csv('data/Males_Array_Data_CW.csv')
+dat.m <- read_csv('../../data/Males_Array_Data_CW.csv')
 #load("data/Males_feature_sel_genelist.rda")
-load("data/feature_pairs_male_v3_round2.rda")
+load("../../data/feature_pairs_male_v3_round3.rda")
 # removing signature genes that are not available in our data sets
-male.jive.gene.list <- readRDS("data/Males_jive_cluster_genes_CW.rds") %>% dplyr::filter(value %in% colnames(dat.m))
+male.jive.gene.list <- readRDS("../../data/Males_jive_cluster_genes_CW.rds") %>% dplyr::filter(value %in% colnames(dat.m))
 ```
 
 ```{r}

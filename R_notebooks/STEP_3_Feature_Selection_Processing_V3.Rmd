@@ -14,14 +14,12 @@ library(robencla)
 
 ```{r}
 ### PULLING OUT SOME GENES
-setwd("E:/Work/GBM_clusters/Classifier_Workflow")
-resdf <- read.csv('data/feature_pairs_males_v3.csv')
-dfa <- read.csv('data/Males_CV_Data_v3.csv')
+# setwd("E:/Work/GBM_clusters/Classifier_Workflow")
+wd <- 'E:/Work/GBM_clusters/'
+resdf <- read.csv(paste0(wd,'data/feature_pairs_males_v3.csv'))
+dfa <- read.csv(paste0(wd,'data/Males_CV_Data_v3.csv'))
 ```
 
-```{r}
-dim(dfa)
-```
 ```{r}
 
 #qplot(x=prop_diff, y=prop_this_cluster,  data=resdf, colour=cluster, alpha=0.5) #  %>% dplyr::filter(cluster=='cluster4')
