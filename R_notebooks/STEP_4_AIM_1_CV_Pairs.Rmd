@@ -19,13 +19,14 @@ devtools::install_github("gibbsdavidl/robencla", force = T)
 ```{r}
 library(tidyverse)
 library(robencla)
+library(pheatmap)
 ```
 
 
 ```{r}
 dat.m <- read_csv('../../data/Males_Array_Data_CW.csv')
 #load("data/Males_feature_sel_genelist.rda")
-load("../../data/feature_pairs_male_v3_round3.rda")
+load("../results/males_genelist.rda")
 # removing signature genes that are not available in our data sets
 male.jive.gene.list <- readRDS("../../data/Males_jive_cluster_genes_CW.rds") %>% dplyr::filter(value %in% colnames(dat.m))
 ```
@@ -35,7 +36,7 @@ table(dat.m$cluster.group)
 ```
 
 ```{r}
-genelist
+genepairs[[2]] <- na.omit( genepairs[[2]] )
 ```
 
 ```{r}
@@ -43,7 +44,7 @@ dim(dat.m)
 ```
 
 ```{r}
-genelist_m <- genelist
+genelist_m <- genepairs
 
 sigs.m <- list("C1"=male.jive.gene.list$value[male.jive.gene.list$cluster.group == 'cluster1'],
                "C2"=male.jive.gene.list$value[male.jive.gene.list$cluster.group == 'cluster2'],
@@ -59,6 +60,7 @@ anne <- Robencla$new("Anne")
   params <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
                  eta=0.2,        # this is the learning rate. smaller values slow it down, more conservative   (xgboost parameter)
                  nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+                 early_stopping_rounds=2,
                  nthreads=5,     # parallel threads
                  gamma=0.5,      # Minimum loss reduc req'd to again partition a leaf node. higher number ~ more conservative (xgboost parameter)
                  lambda=1.5,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
@@ -92,13 +94,15 @@ df.m$cluster4 <- as.numeric(df.m$cluster4)
 df.m$cluster5 <- as.numeric(df.m$cluster5)
 head(df.m)
 
-write.table(as.data.frame(df.m), 'results/male_cv_pairs_round2.csv', sep=',', quote = F, row.names = F)
+#write.table(as.data.frame(df.m), 'results/male_cv_pairs_round2.csv', sep=',', quote = F, row.names = F)
 ```
 
 ```{r}
 df.m <- read.csv('results/male_cv_pairs_round2.csv')
 
 tabdf <- table(Pred=df.m$BestCalls, True=df.m$Label)
+
+print(tabdf)
 
 tabtbl <- as.data.frame(tabdf) %>% 
   pivot_wider(id_cols = Pred,names_from = True, values_from = Freq) %>% 
@@ -179,7 +183,7 @@ plot_roc(anne, 4, flip=T)
 
 ```{r}
 #ensemble_rocs(anne)
-plot_roc(anne, 5, flip=T)
+plot_roc(anne, 5, flip=F)
 ```
 
 ```{r}

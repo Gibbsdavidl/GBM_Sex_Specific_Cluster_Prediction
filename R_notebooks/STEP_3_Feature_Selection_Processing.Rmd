@@ -1,0 +1,244 @@
+---
+title: An R Markdown document converted from "STEP_3_Feature_Selection_Processing_V3.ipynb"
+output: html_document
+---
+
+```{r}
+#devtools::install_github("gibbsdavidl/robencla", force = F)
+```
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+### PULLING OUT SOME GENES
+# setwd("E:/Work/GBM_clusters/Classifier_Workflow")
+# wd <- 'E:/Work/GBM_clusters/'
+# resdf <- read.csv(paste0(wd,'../results/feature_pairs_males_v3.csv'))
+#dfa <- read.csv(paste0(wd,'data/Males_CV_Data_v3.csv'))\\
+
+wd <- 'E:/Work/GBM_clusters/'
+dfa_m <- read.csv(paste0(wd,'data/Males_CV_Data_v3.csv'))
+
+resdf_m <- read_csv('../results/feature_selection_table_male.csv')
+table(resdf_m$cluster)
+
+```
+
+```{r}
+
+minExprVals <- sapply (2:10343, function(i) {
+  gene <- colnames(dfa_m)[i]
+  min(dfa_m[,i])
+})
+
+names(minExprVals) <- colnames(dfa_m)[2:10343]
+
+
+selected_genes <- names(minExprVals)[minExprVals > 4.6]
+
+
+getgenecols <- function(gene_i, gene_j, dfa_m, x)  {
+  gene_names <- colnames(dfa_m)[c(gene_i, gene_j)]
+  return(gene_names)
+}
+
+
+makenewcols <- function(gene_i, gene_j, dfa_m, x)  {
+  gene_names <- colnames(dfa_m)[c(gene_i, gene_j)]
+  minvals <- x[gene_names]
+  return(minvals)
+}
+
+
+minvallist <- lapply(1:nrow(resdf_m), function(i) {
+  makenewcols(unlist(resdf_m[i, 'gene_i']), unlist(resdf_m[i, 'gene_j']), dfa_m, minExprVals)
+})
+
+
+genelist <- lapply(1:nrow(resdf_m), function(i) {
+  getgenecols(unlist(resdf_m[i, 'gene_i']), unlist(resdf_m[i, 'gene_j']), dfa_m, minExprVals)
+})
+
+
+minvalmat <- do.call('rbind', minvallist)
+genemat <- do.call('rbind', genelist)
+
+
+annotdf_m <- resdf_m
+annotdf_m['gene_i_symbol'] <- genemat[,1]
+annotdf_m['gene_j_symbol'] <- genemat[,2]
+annotdf_m['gene_i_min'] <- minvalmat[,1]
+annotdf_m['gene_j_min'] <- minvalmat[,2]
+
+
+```
+
+
+
+```{r}
+
+topn <- 25
+
+getpairs <- function(pairmat, cluster_c, thresh) {
+
+    # first filter the table by min expression value
+    filtmat <- pairmat[ (pairmat$gene_i_min > thresh) & (pairmat$gene_j_min > thresh) & (pairmat$cluster == cluster_c), ]
+    
+    idx <- order(filtmat$dist_ij_cluster, decreasing = T)[1:topn]
+    jdx <- order(filtmat$dist_ij_cluster, decreasing = F)[1:topn]
+
+    upgenes <- c()
+    for (i in idx) {
+      upgenes <- c(upgenes, as.character(filtmat[i, 'gene_i_symbol']))
+      upgenes <- c(upgenes, as.character(filtmat[i, 'gene_j_symbol']))
+    }
+    dngenes <- c()
+    for (j in jdx) {
+      dngenes <- c(dngenes, as.character(filtmat[j, 'gene_i_symbol']))
+      dngenes <- c(dngenes, as.character(filtmat[j, 'gene_j_symbol']))
+    }
+
+    return( c(upgenes, dngenes) )    
+}
+
+genepairs <- list(
+  'cluster1'=getpairs(annotdf_m, 'cluster1', 4.6),
+  'cluster2'=getpairs(annotdf_m, 'cluster2', 4.6),
+  'cluster3'=getpairs(annotdf_m, 'cluster3', 4.4),
+  'cluster4'=getpairs(annotdf_m, 'cluster4', 4.6),
+  'cluster5'=getpairs(annotdf_m, 'cluster5', 4.5)
+)
+
+```
+
+```{r}
+genepairs
+```
+
+```{r}
+save(genelist, file='../results/males_genelist.rda')
+```
+
+
+
+# Now for the female samples # 
+
+
+
+
+
+```{r}
+### PULLING OUT SOME GENES
+# setwd("E:/Work/GBM_clusters/Classifier_Workflow")
+# wd <- 'E:/Work/GBM_clusters/'
+# resdf <- read.csv(paste0(wd,'../results/feature_pairs_males_v3.csv'))
+#dfa <- read.csv(paste0(wd,'data/Males_CV_Data_v3.csv'))\\
+
+wd <- 'E:/Work/GBM_clusters/'
+dfa_f <- read.csv(paste0(wd,'data/Females_CV_Data_v3.csv'))
+
+resdf_f <- read_csv('../results/feature_selection_table_female.csv')
+table(resdf_m$cluster)
+
+```
+
+```{r}
+
+minExprVals <- sapply (2:10343, function(i) {
+  gene <- colnames(dfa_f)[i]
+  min(dfa_f[,i])
+})
+
+names(minExprVals) <- colnames(dfa_f)[2:10343]  # last col is cluster ID
+
+
+selected_genes <- names(minExprVals)[minExprVals > 4.6]
+
+
+getgenecols <- function(gene_i, gene_j, dfa_f, x)  {
+  gene_names <- colnames(dfa_f)[c(gene_i, gene_j)]
+  return(gene_names)
+}
+
+
+makenewcols <- function(gene_i, gene_j, dfa_f, x)  {
+  gene_names <- colnames(dfa_f)[c(gene_i, gene_j)]
+  minvals <- minExprVals[gene_names]
+  return(minvals)
+}
+
+
+minvallist <- lapply(1:nrow(resdf_f), function(i) {
+  makenewcols(unlist(resdf_f[i, 'gene_i']), unlist(resdf_f[i, 'gene_j']), dfa_f, minExprVals)
+})
+
+
+genelist <- lapply(1:nrow(resdf_f), function(i) {
+  getgenecols(unlist(resdf_f[i, 'gene_i']), unlist(resdf_f[i, 'gene_j']), dfa_f, minExprVals)
+})
+
+
+minvalmat <- do.call('rbind', minvallist)
+genemat <- do.call('rbind', genelist)
+
+
+annotdf_f <- resdf_f
+annotdf_f['gene_i_symbol'] <- genemat[,1]
+annotdf_f['gene_j_symbol'] <- genemat[,2]
+annotdf_f['gene_i_min'] <- minvalmat[,1]
+annotdf_f['gene_j_min'] <- minvalmat[,2]
+
+
+```
+
+
+
+
+
+```{r}
+
+topn <- 25
+
+getpairs <- function(pairmat, cluster_c, thresh) {
+
+    # first filter the table by min expression value
+    filtmat <- pairmat[ (pairmat$gene_i_min > thresh) & (pairmat$gene_j_min > thresh) & (pairmat$cluster == cluster_c), ]
+    
+    idx <- order(filtmat$dist_ij_cluster, decreasing = T)[1:topn]
+    jdx <- order(filtmat$dist_ij_cluster, decreasing = F)[1:topn]
+
+    upgenes <- c()
+    for (i in idx) {
+      upgenes <- c(upgenes, as.character(filtmat[i, 'gene_i_symbol']))
+      upgenes <- c(upgenes, as.character(filtmat[i, 'gene_j_symbol']))
+    }
+    dngenes <- c()
+    for (j in jdx) {
+      dngenes <- c(dngenes, as.character(filtmat[j, 'gene_i_symbol']))
+      dngenes <- c(dngenes, as.character(filtmat[j, 'gene_j_symbol']))
+    }
+
+    return( c(upgenes, dngenes) )    
+}
+
+genepairs <- list(
+  'cluster1'=getpairs(annotdf_f, 'cluster1', 4.6),
+  'cluster2'=getpairs(annotdf_f, 'cluster2', 4.6),
+  'cluster3'=getpairs(annotdf_f, 'cluster3', 4.6),
+  'cluster4'=getpairs(annotdf_f, 'cluster4', 4.2),
+  'cluster5'=getpairs(annotdf_f, 'cluster5', 4.6)
+)
+
+```
+
+```{r}
+genepairs
+```
+
+
+```{r}
+save(genelist, file='../results/females_genelist.rda')
+```
+

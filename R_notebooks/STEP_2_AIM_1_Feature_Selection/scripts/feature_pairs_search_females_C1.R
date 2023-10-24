@@ -1,7 +1,7 @@
 
 #library(tidyverse)
 
-dat <- read.csv('version3/Females_CV_Data_v3.csv')
+dat <- read.csv('../data/Females_CV_Data_v3.csv')
 
 ## We will work on one cluster at a time.
 labels <- c('cluster1','cluster2','cluster3','cluster4','cluster5')
@@ -39,7 +39,7 @@ for (i in 2:(ngenes-1)){
 
     # if the difference in proportions, between cluster and not-cluster
     # is greater than 75%, then record the gene pair.
-    if (abs(prop1-prop2) > 0.66) {
+    if (abs(prop1-prop2) > 0.5) {
 
           # next line: distnance between the two genes, within sample grouping.
           dist1 <- sum(labdat[,i] - labdat[,j])
@@ -66,5 +66,5 @@ print(dim(resdf))
 colnames(resdf) <- c('cluster','pair','gene_i','gene_j','prop_this_cluster','prop_not_cluster',
                      'dist_ij_cluster','dist_ij_not_cluster','prop_diff')
 
-save(resdf, file=paste0('female_resdf_',this_label,'.rda'))
-write.csv(resdf, file=paste0('feature_pairs_female_',this_label,'.csv'))
+save(resdf, file=paste0('female_resdf_',this_label,'_thresh04.rda'))
+write.csv(resdf, file=paste0('feature_pairs_female_',this_label,'_thresh04.csv'))

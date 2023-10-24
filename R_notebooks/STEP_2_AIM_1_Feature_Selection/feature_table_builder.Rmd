@@ -1,10 +1,40 @@
 ---
-title: "R Notebook"
-output: html_notebook
+title: "feature_merge"
+output: html_document
+date: "2023-10-22"
 ---
+
+Merging the feature search for each cluster.
+
+```{r}
+library(readr)
+```
+
 
 
 ```{r}
-resdf <- read.csv('../data/feature_pairs_males_v3.csv')
+
+fc1 <- read_csv('results/feature_pairs_female_cluster1_thresh04.csv.gz')
+fc2 <- read_csv('results/feature_pairs_female_cluster2.csv.gz')
+fc3 <- read_csv('results/feature_pairs_female_cluster3.csv.gz')
+fc4 <- read_csv('results/feature_pairs_female_cluster4.csv.gz')
+fc5 <- read_csv('results/feature_pairs_female_cluster5_thresh04.csv.gz')
+
+
+mc1 <- read_csv('results/feature_pairs_males_cluster1.csv.gz')
+mc2 <- read_csv('results/feature_pairs_males_cluster2_thresh04.csv.gz')
+mc3 <- read_csv('results/feature_pairs_males_cluster3.csv.gz')
+mc4 <- read_csv('results/feature_pairs_males_cluster4.csv.gz')
+mc5 <- read_csv('results/feature_pairs_males_cluster5.csv.gz')
+
+```
+
+
+```{r}
+
+resdf_f <- bind_rows(list(fc1, fc2, fc3, fc4, fc5))
+
+resdf_m <- bind_rows(list(mc1, mc2, mc3, mc4, mc5))
+
 ```
 

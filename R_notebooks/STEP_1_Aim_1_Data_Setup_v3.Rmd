@@ -12,6 +12,9 @@ output: html_document
 library(tidyverse)
 library(bigrquery)
 library(rstatix)
+library(openxlsx)
+library(reshape2)
+library(janitor)
 # bq_auth(use_oob = TRUE, cache = FALSE)
 ```
 
@@ -19,32 +22,32 @@ library(rstatix)
 ## JIVE Paper Information
 
 # Male IDs
-male.jive.id.raw <- openxlsx::read.xlsx("data/aao5253_tables_s1_to_s12.xlsx", sheet = "Supplemental Table 2", colNames = F, rows = 5:10)
+male.jive.id.raw <- openxlsx::read.xlsx("../data/aao5253_tables_s1_to_s12.xlsx", sheet = "Supplemental Table 2", colNames = F, rows = 5:10)
 male.jive.id.list <- reshape2::melt(male.jive.id.raw[,-2], id = "X1") %>% rename(cluster.group = X1) %>% select(-variable) %>% filter(!is.na(value)) %>% arrange(cluster.group)
 
 # Female IDs
-female.jive.id.raw <- openxlsx::read.xlsx("data/aao5253_tables_s1_to_s12.xlsx", sheet = "Supplemental Table 2", colNames = F, rows = 21:25)
+female.jive.id.raw <- openxlsx::read.xlsx("../data/aao5253_tables_s1_to_s12.xlsx", sheet = "Supplemental Table 2", colNames = F, rows = 21:25)
 female.jive.id.list <- reshape2::melt(female.jive.id.raw[,-2], id = "X1") %>% rename(cluster.group = X1) %>% select(-variable) %>% filter(!is.na(value)) %>% arrange(cluster.group)
 
 # Male Gene List
-male.jive.gene.raw <- openxlsx::read.xlsx("data/aao5253_tables_s1_to_s12.xlsx", sheet = "Supplemental Table 2", colNames = F, rows = 12:16)
+male.jive.gene.raw <- openxlsx::read.xlsx("../data/aao5253_tables_s1_to_s12.xlsx", sheet = "Supplemental Table 2", colNames = F, rows = 12:16)
 male.jive.gene.list <- reshape2::melt(male.jive.gene.raw[,-2], id = "X1") %>% rename(cluster.group = X1) %>% select(-variable) %>% filter(!is.na(value)) %>% arrange(cluster.group)
 
 # Female Gene List
-female.jive.gene.raw <- openxlsx::read.xlsx("data/aao5253_tables_s1_to_s12.xlsx", sheet = "Supplemental Table 2", colNames = F, rows = 28:32)
+female.jive.gene.raw <- openxlsx::read.xlsx("../data/aao5253_tables_s1_to_s12.xlsx", sheet = "Supplemental Table 2", colNames = F, rows = 28:32)
 female.jive.gene.list <- reshape2::melt(female.jive.gene.raw[,-2], id = "X1") %>% rename(cluster.group = X1) %>% select(-variable) %>% filter(!is.na(value)) %>% arrange(cluster.group)
 ```
 
 ```{r}
 # Filtering genes to those that code proteins
-gene_table <- read_table('data/ncbi_gene_table_dec272022.tsv')
+gene_table <- read_table('../data/ncbi_gene_table_dec272022.tsv')
 prot_coding <- gene_table %>% dplyr::filter(Gene_Type == 'PROTEIN_CODING')
 ```
 
 ```{r}
 ## Array data for training
 
-array.raw <- read_tsv('data/raw/TCGA.GBM.sampleMap_HT_HG-U133A.tsv.gz', show_col_types = FALSE)
+array.raw <- read_tsv('../../rawdata/TCGA.GBM.sampleMap_HT_HG-U133A.tsv.gz', show_col_types = FALSE)
 array.raw.2 <- as.data.frame(t(array.raw))
 array.data <- array.raw.2 %>% tibble::rownames_to_column("sample") %>% janitor::row_to_names(row_number = 1)
 array.data[,2:(ncol(array.data))] <- lapply(array.data[,2:(ncol(array.data))],as.numeric)
@@ -69,8 +72,9 @@ TCGA <- "
 ```
 
 ```{r}
-tcga.import <- bq_project_query ('gbm-gender', query = TCGA) #Put data in temporary BQ table
-tcga_dwnld<- bq_table_download(tcga.import) #Put data into a dataframe
+tcga.import <- bq_project_query('gbm-gender', query = TCGA) #Put data in temporary BQ table
+
+tcga_dwnld <- bq_table_download(tcga.import) #Put data into a dataframe
 
 rnaseq.data<-tcga_dwnld %>% 
      pivot_wider(id_cols = case_id, names_from = gene_name, values_from = gene_exp) %>% rename(sample = case_id)
@@ -90,7 +94,7 @@ tempus.import <- bq_project_query ('gbm-gender', query = TEMPUS) #Put data in te
 
 tempus_dwnld<- bq_table_download(tempus.import) #Put data into a dataframe
 
-write.table(tempus_dwnld, file = 'data/tempus_dwnld.csv', quote = F, row.names = F, sep = ',')
+write.table(tempus_dwnld, file = '../../rawdata/tempus_dwnld.csv', quote = F, row.names = F, sep = ',')
 ```
 
 ```{r}
@@ -106,7 +110,7 @@ rnaseq.data <- rnaseq.data[, c(1,jdx+1)]
 
 ```{r}
 ## Tempus Data Preprocessing
-tempus_dwnld<- read.csv(file = 'data/tempus_dwnld.csv', stringsAsFactors = F, header = T)
+tempus_dwnld<- read.csv(file = '../../rawdata/tempus_dwnld.csv', stringsAsFactors = F, header = T)
 
 tempus_males <-tempus_dwnld %>% filter(Sex == "male") %>%
      pivot_wider(id_cols = case_id, names_from = gene_name, values_from = gene_exp) %>% rename(sample = case_id)
@@ -162,12 +166,12 @@ dim(train.f)
 
 ```{r}
 # Male data
-saveRDS(male.jive.gene.list, "data/Males_jive_cluster_genes_v3_GC.rds")
-write.csv(train.m,"data/Males_CV_Data_v3_GC.csv",row.names=F)
+saveRDS(male.jive.gene.list, "../data/Males_jive_cluster_genes.rds")
+write.csv(train.m,"../data/Males_Array_Data.csv",row.names=F)
 
 # Female data
-saveRDS(female.jive.gene.list, "data/Female_jive_cluster_genes_v3_GC.rds")
-write.csv(train.f,"data/Females_CV_Data_v3_GC.csv",row.names=F)
+saveRDS(female.jive.gene.list, "../data/Female_jive_cluster_genes.rds")
+write.csv(train.f,"../data/Females_Array_Data.csv",row.names=F)
 ```
 
 ```{r}
@@ -190,10 +194,10 @@ train.f <- tcga.tempus.jive.f %>% inner_join(. , female.jive.id.list, by = c("sa
 
 ```{r}
 tempus.m.test$cluster.group <- NA
-write.csv(tempus.m.test,"data/Males_Tempus_Test_v3_GC.csv",row.names=F)
+write.csv(tempus.m.test,"../data/Males_Tempus_Test.csv",row.names=F)
 
 tempus.f.test$cluster.group <- NA
-write.csv(tempus.f.test,"data/Females_Tempus_Test_v3_GC.csv",row.names=F)
+write.csv(tempus.f.test,"../data/Females_Tempus_Test.csv",row.names=F)
 ```
 
 ```{r}
@@ -211,11 +215,12 @@ dim(rnaseq.f)
 ```
 
 ```{r}
-write.csv(train.m,"data/Males_RNASeq_Data_v3_GC.csv",row.names=F)
-write.csv(train.f,"data/Females_RNASeq_Data_v3_GC.csv",row.names=F)
+write.csv(train.m,"../data/Males_RNASeq_Data.csv",row.names=F)
+write.csv(train.f,"../data/Females_RNASeq_Data.csv",row.names=F)
 ```
 
 ```{r}
 # DONE
+# Then data sets were compressed with gzip
 ```
 
