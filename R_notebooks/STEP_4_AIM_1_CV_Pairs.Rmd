@@ -13,7 +13,7 @@ Questions: Are there missing genes, in array, that are present in RNA-seq, that 
 
 
 ```{r}
-devtools::install_github("gibbsdavidl/robencla", force = T)
+# devtools::install_github("gibbsdavidl/robencla", force = T)
 ```
 
 ```{r}
@@ -24,19 +24,16 @@ library(pheatmap)
 
 
 ```{r}
-dat.m <- read_csv('../../data/Males_Array_Data_CW.csv')
-#load("data/Males_feature_sel_genelist.rda")
-load("../results/males_genelist.rda")
+dat.m <- read_csv('../data/Males_Array_Data.csv.gz')
+
+load("../results/males_genepairs.rda")
+
 # removing signature genes that are not available in our data sets
-male.jive.gene.list <- readRDS("../../data/Males_jive_cluster_genes_CW.rds") %>% dplyr::filter(value %in% colnames(dat.m))
+male.jive.gene.list <- readRDS("../data/Males_jive_cluster_genes.rds") %>% dplyr::filter(value %in% colnames(dat.m))
 ```
 
 ```{r}
 table(dat.m$cluster.group)
-```
-
-```{r}
-genepairs[[2]] <- na.omit( genepairs[[2]] )
 ```
 
 ```{r}
@@ -56,15 +53,15 @@ sigs.m <- list("C1"=male.jive.gene.list$value[male.jive.gene.list$cluster.group 
 # our classifier object named Anne.
 anne <- Robencla$new("Anne")
 
-  # xgboost parameters to pass to each sub-classifier in the ensembles
-  params <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
-                 eta=0.2,        # this is the learning rate. smaller values slow it down, more conservative   (xgboost parameter)
+# xgboost parameters to pass to each sub-classifier in the ensembles
+params <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+                 eta=0.3,        # this is the learning rate. smaller values slow it down, more conservative   (xgboost parameter)
                  nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
                  early_stopping_rounds=2,
                  nthreads=5,     # parallel threads
-                 gamma=0.5,      # Minimum loss reduc req'd to again partition a leaf node. higher number ~ more conservative (xgboost parameter)
-                 lambda=1.5,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
-                 alpha=0.5,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+                 gamma=0.0,      # Minimum loss reduc req'd to again partition a leaf node. higher number ~ more conservative (xgboost parameter)
+                 lambda=1.0,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
+                 alpha=0.0,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
                  verbose=0,
                  train_perc=0.8,
                  combine_function='median',
@@ -77,7 +74,7 @@ anne <- Robencla$new("Anne")
 anne$autocv(data_frame=dat.m,
             label_name='cluster_group',
             sample_id = 'sample',
-            data_mode=c('pairs'), # pairs,allpairs,sigpairs,quartiles,tertiles,binarize,ranks,original #
+            data_mode=c('pairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
             signatures=NULL,
             pair_list=genelist_m,  # subset to these genes.
             params=params,
@@ -94,11 +91,10 @@ df.m$cluster4 <- as.numeric(df.m$cluster4)
 df.m$cluster5 <- as.numeric(df.m$cluster5)
 head(df.m)
 
-#write.table(as.data.frame(df.m), 'results/male_cv_pairs_round2.csv', sep=',', quote = F, row.names = F)
+write.table(as.data.frame(df.m), '../results/male_tcga_cv_pairs_only.csv', sep=',', quote = F, row.names = F)
 ```
 
 ```{r}
-df.m <- read.csv('results/male_cv_pairs_round2.csv')
 
 tabdf <- table(Pred=df.m$BestCalls, True=df.m$Label)
 
@@ -117,21 +113,21 @@ pheatmap(tabtbl, cluster_rows = F, cluster_cols = F, )
 
 
 ```{r}
-anne$classification_metrics()
+metrics <- anne$classification_metrics()
+write_csv(metrics, file='../results/males_tcga_array_metrics_step4.csv')
+metrics
 ```
 
 ```{r}
 
 imp_list <- anne$importance()
 
-save(imp_list, file='results/male_CV_pairs_importance_round2.rda')
+save(imp_list, file='../results/male_CV_pairs_importance_step4.rda')
 
 imp_list
 ```
 
 ```{r}
-load('results/male_CV_pairs_importance_round2.rda')
-
 
 df1 <- data.frame(Top15=1:15, Cluster='cluster1',imp_list[['cluster1']][1:15,])
 df2 <- data.frame(Top15=1:15, Cluster='cluster2',imp_list[['cluster2']][1:15,])
@@ -187,15 +183,32 @@ plot_roc(anne, 5, flip=F)
 ```
 
 ```{r}
+save(anne, file='../models/males_tcga_array_step4.rda')
+```
+
+
+
+```{r}
+
+
+
+
+
 ### FEMALES ###
+
+
+
+
+
 ```
 
 ```{r}
-dat.f <- read_csv('data/Females_Array_Data_CW.csv')
-load('data/feature_pairs_female_v3_round2.csv')
-genelist_f <- genelist
+dat.f <- read_csv('../data/Females_Array_Data.csv.gz')
+
+load('../results/females_genepairs.rda')
+
 # removing signature genes that are not available in our data sets
-female.jive.gene.list <- readRDS("data/Female_jive_cluster_genes_CW.rds") %>% dplyr::filter(value %in% colnames(dat.f))
+female.jive.gene.list <- readRDS("../data/Female_jive_cluster_genes.rds") %>% dplyr::filter(value %in% colnames(dat.f))
 ```
 
 ```{r}
@@ -203,11 +216,11 @@ table(dat.f$cluster.group)
 ```
 
 ```{r}
-length(genelist)
+length(genepairs)
 ```
 
 ```{r}
-genelist_f <- genelist
+genelist_f <- genepairs
 
 sigs_f <- list("C1"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster1'],
                "C2"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster2'],
@@ -221,14 +234,14 @@ sigs_f <- list("C1"=female.jive.gene.list$value[female.jive.gene.list$cluster.gr
 buffy <- Robencla$new("buffy")
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
-  # xgboost parameters to pass to each sub-classifier in the ensembles
-  params <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
-                 eta=0.2,        # this is the learning rate. smaller values slow it down, more conservative   (xgboost parameter)
+params <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+                 eta=0.3,        # this is the learning rate. smaller values slow it down, more conservative   (xgboost parameter)
                  nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+                 early_stopping_rounds=2,
                  nthreads=5,     # parallel threads
-                 gamma=0.5,      # Minimum loss reduc req'd to again partition a leaf node. higher number ~ more conservative (xgboost parameter)
-                 lambda=1.5,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
-                 alpha=0.5,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+                 gamma=0.0,      # Minimum loss reduc req'd to again partition a leaf node. higher number ~ more conservative (xgboost parameter)
+                 lambda=1.0,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
+                 alpha=0.0,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
                  verbose=0,
                  train_perc=0.8,
                  combine_function='median',
@@ -239,16 +252,15 @@ buffy <- Robencla$new("buffy")
 ```{r}
 
 # First we use the training data
-buffy$autocv(data_file='data/Females_Array_Data_CW.csv',
-               label_name='cluster.group',
-               sample_id = 'sample',
-               data_mode=c('pairs'), # pairs,sigpairs,quartiles,tertiles,binarize,ranks,original #
-               signatures=NULL,
-               pair_list=genelist_f,  # subset to these genes.
-               params=params,
-               cv_rounds=10
-              )
-
+buffy$autocv(data_frame=dat.f,
+            label_name='cluster_group',
+            sample_id = 'sample',
+            data_mode=c('pairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
+            signatures=NULL,
+            pair_list=genelist_f,  # subset to these genes.
+            params=params,
+            cv_rounds=10
+            )
 ```
 
 ```{r}
@@ -260,13 +272,14 @@ df.f$cluster4 <- as.numeric(df.f$cluster4)
 df.f$cluster5 <- as.numeric(df.f$cluster5)
 head(df.f)
 
-write.table(as.data.frame(df.f), 'results/female_cv_pairs_round2.csv', sep=',', quote = F, row.names = F)
+write.table(as.data.frame(df.f), '../results/female_cv_pairs_step4.csv', sep=',', quote = F, row.names = F)
 ```
 
 ```{r}
-df.f <- read.csv('results/female_cv_pairs_round2.csv')
 
 tabdf <- table(Pred=df.f$BestCalls, True=df.f$Label)
+
+print(tabdf)
 
 tabtbl <- as.data.frame(tabdf) %>% 
   pivot_wider(id_cols = Pred,names_from = True, values_from = Freq) %>% 
@@ -279,20 +292,23 @@ pheatmap(tabtbl, cluster_rows = F, cluster_cols = F)
 ```
 
 ```{r}
-buffy$classification_metrics()
+metrics <- buffy$classification_metrics()
+write_csv(metrics, file='../results/females_tcga_array_metrics_step4.csv')
+metrics
 ```
 
 ```{r}
 
 imp_list <- buffy$importance()
 
-save(imp_list, file='results/female_CV_pairs_importance_round2.rda')
+save(imp_list, file='../results/female_CV_pairs_importance_step4.rda')
+
+imp_list
+
 ```
 
 
 ```{r}
-load('results/female_CV_pairs_importance_round2.rda')
-
 
 df1 <- data.frame(Top15=1:15, Cluster='cluster1',imp_list[['cluster1']][1:15,])
 df2 <- data.frame(Top15=1:15, Cluster='cluster2',imp_list[['cluster2']][1:15,])
@@ -347,6 +363,9 @@ plot_roc(buffy, 5, flip=F)
 ```
 
 ```{r}
+
+save(buffy, file='../models/females_tcga_array_step4.rda')
+
 #FIN
 ```
 

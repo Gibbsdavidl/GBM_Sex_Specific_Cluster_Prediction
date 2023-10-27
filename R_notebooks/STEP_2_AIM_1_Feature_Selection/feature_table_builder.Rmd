@@ -7,6 +7,7 @@ date: "2023-10-22"
 Merging the feature search for each cluster.
 
 ```{r}
+library(tidyverse)
 library(readr)
 ```
 
@@ -17,7 +18,7 @@ library(readr)
 fc1 <- read_csv('results/feature_pairs_female_cluster1_thresh04.csv.gz')
 fc2 <- read_csv('results/feature_pairs_female_cluster2.csv.gz')
 fc3 <- read_csv('results/feature_pairs_female_cluster3.csv.gz')
-fc4 <- read_csv('results/feature_pairs_female_cluster4.csv.gz')
+fc4 <- read_csv('results/feature_pairs_female_cluster4_thresh66.csv.gz')
 fc5 <- read_csv('results/feature_pairs_female_cluster5_thresh04.csv.gz')
 
 
@@ -37,4 +38,14 @@ resdf_f <- bind_rows(list(fc1, fc2, fc3, fc4, fc5))
 resdf_m <- bind_rows(list(mc1, mc2, mc3, mc4, mc5))
 
 ```
+
+```{r}
+
+write_csv(resdf_f, file='../../results/feature_selection_table_female.csv')
+
+write_csv(resdf_m, file='../../results/feature_selection_table_male.csv')
+
+
+```
+
 

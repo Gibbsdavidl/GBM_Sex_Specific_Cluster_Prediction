@@ -5,7 +5,7 @@ output: html_document
 
 ```{r}
 # data prep #
-#install.packages('rstatix')
+install.packages(c('rstatix', 'openxlsx', 'reshape2', 'janitor', 'bigrquery'))
 ```
 
 ```{r}
@@ -40,7 +40,7 @@ female.jive.gene.list <- reshape2::melt(female.jive.gene.raw[,-2], id = "X1") %>
 
 ```{r}
 # Filtering genes to those that code proteins
-gene_table <- read_table('../data/ncbi_gene_table_dec272022.tsv')
+gene_table <- read_table('../data/ncbi_gene_table_dec272022.tsv.gz')
 prot_coding <- gene_table %>% dplyr::filter(Gene_Type == 'PROTEIN_CODING')
 ```
 
@@ -202,11 +202,18 @@ write.csv(tempus.f.test,"../data/Females_Tempus_Test.csv",row.names=F)
 
 ```{r}
 # processing the RNA-seq data #
-tgca.rnaseq.jive <- rnaseq.data[rnaseq.data$sample %in% c(male.jive.id.list$value,female.jive.id.list$value),]
 
-rnaseq.m <- tgca.rnaseq.jive %>% inner_join(. , male.jive.id.list, by = c("sample" = "value"))
+male_ids <- str_sub(male.jive.id.list$value, start=1, end=12)
+female_ids <- str_sub(female.jive.id.list$value, start=1, end=12)
 
-rnaseq.f <- tgca.rnaseq.jive %>% inner_join(. , female.jive.id.list, by = c("sample" = "value"))
+male.jive.id.list$sample = male_ids
+female.jive.id.list$sample = female_ids
+
+tgca.rnaseq.jive <- rnaseq.data[rnaseq.data$sample %in% c(male_ids,female_ids),]
+
+rnaseq.m <- tgca.rnaseq.jive %>% inner_join(. , male.jive.id.list, by = c("sample" = "sample"))
+
+rnaseq.f <- tgca.rnaseq.jive %>% inner_join(. , female.jive.id.list, by = c("sample" = "sample"))
 ```
 
 ```{r}
@@ -215,8 +222,8 @@ dim(rnaseq.f)
 ```
 
 ```{r}
-write.csv(train.m,"../data/Males_RNASeq_Data.csv",row.names=F)
-write.csv(train.f,"../data/Females_RNASeq_Data.csv",row.names=F)
+write.csv(rnaseq.m,"../data/Males_RNASeq_Data.csv",row.names=F)
+write.csv(rnaseq.f,"../data/Females_RNASeq_Data.csv",row.names=F)
 ```
 
 ```{r}

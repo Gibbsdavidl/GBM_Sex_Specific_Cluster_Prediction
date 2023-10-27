@@ -123,6 +123,6 @@ gse13041 <- get_expression_matrix_from_GEO("GSE13041")
 
 ```{r}
 # load series and platform data from GEO
-gset2 <- getGEO("GSE16011", GSEMatrix =TRUE, AnnotGPL=TRUE)[[1]]
+gse16011 <- get_expression_matrix_from_GEO("GSE16011")
 ```
 
