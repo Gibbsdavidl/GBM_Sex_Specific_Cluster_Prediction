@@ -42,28 +42,77 @@ save(gset13041, gset16011, file = '../data/jive_validation_array_data.rda')
 
 # make proper column names to match toptable 
 fvarLabels(gset13041[[1]]) <- make.names(fvarLabels(gset13041[[1]]))
+fvarLabels(gset13041[[2]]) <- make.names(fvarLabels(gset13041[[2]]))
+fvarLabels(gset13041[[3]]) <- make.names(fvarLabels(gset13041[[3]]))
 
 ex1 <- exprs(gset13041[[1]])
+ex2 <- exprs(gset13041[[2]])
+ex3 <- exprs(gset13041[[3]])
 
 ph1 <- phenoData(gset13041[[1]])
+ph2 <- phenoData(gset13041[[2]])
+ph3 <- phenoData(gset13041[[3]])
 
-phenotype_data <- pData(ph1)
+phenotype_data1 <- pData(ph1)
+phenotype_data2 <- pData(ph2)
+phenotype_data3 <- pData(ph3)
 
-# make proper column names to match toptable 
-fvarLabels(gset16011[[1]]) <- make.names(fvarLabels(gset16011[[1]]))
+sym1 <- fData(gset13041[[1]])$Gene.symbol
+sym2 <- fData(gset13041[[2]])$Gene.symbol
+sym3 <- fData(gset13041[[3]])$Gene.symbol
 
-ex1 <- exprs(gset16011[[1]])
+df1 <- as.data.frame(t(ex1))
+colnames(df1) <- sym1
+df1[['sample']] <- rownames(df1)
 
-ph1 <- phenoData(gset16011[[1]])
+df2 <- as.data.frame(t(ex2))
+colnames(df2) <- sym2
 
-phenotype_data <- pData(ph1)
+df3 <- as.data.frame(t(ex3))
+colnames(df3) <- sym3
+
+
+pdf1 <- phenotype_data1[, c('geo_accession', 'characteristics_ch1.1', 'characteristics_ch1.2',
+                            'characteristics_ch1.3', 'characteristics_ch1.4','characteristics_ch1.5', 'characteristics_ch1.6')]
+
+pdf2 <- phenotype_data2[, c('geo_accession', 'characteristics_ch1.1', 'characteristics_ch1.2',
+                            'characteristics_ch1.3', 'characteristics_ch1.4','characteristics_ch1.5', 'characteristics_ch1.6')]
+
+pdf3 <- phenotype_data3[, c('geo_accession', 'characteristics_ch1.1', 'characteristics_ch1.2',
+                            'characteristics_ch1.3', 'characteristics_ch1.4','characteristics_ch1.5', 'characteristics_ch1.6')]
+
 
 ```
 
+Then we need to convert the probeIDs to gene symbols
 
 
 
 
+```{r}
 
+# load up the model
+load('../models/females_tcga_array_step4.rda')
+
+# load up the gene pairs used
+load('../results/females_genepairs.rda')
+
+# check what genes might be missing
+unlist(genepairs) [! unlist(genepairs) %in% colnames(df1) ]
+# cluster23 cluster213 
+#   "PTCD1"     "CCT3" 
+
+expr1 <- df1
+
+colnames(expr1)[6]  <- "PTCD1"
+
+colnames(expr1)[7]  <- "CCT3"    
+
+unlist(genepairs) [! unlist(genepairs) %in% colnames(expr1) ]
+
+buffy$predict(data_frame = expr1,
+              sample_id = 'sample')
+   
+```
 
 

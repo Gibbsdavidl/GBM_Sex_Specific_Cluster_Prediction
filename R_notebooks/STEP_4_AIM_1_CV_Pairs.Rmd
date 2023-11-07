@@ -13,7 +13,7 @@ Questions: Are there missing genes, in array, that are present in RNA-seq, that 
 
 
 ```{r}
-# devtools::install_github("gibbsdavidl/robencla", force = T)
+#devtools::install_github("gibbsdavidl/robencla", force = T)
 ```
 
 ```{r}
@@ -55,13 +55,13 @@ anne <- Robencla$new("Anne")
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
 params <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
-                 eta=0.3,        # this is the learning rate. smaller values slow it down, more conservative   (xgboost parameter)
-                 nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+                 eta=0.2,        # this is the learning rate. smaller values slow it down, more conservative   (xgboost parameter)
+                 nrounds=64,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
                  early_stopping_rounds=2,
                  nthreads=5,     # parallel threads
-                 gamma=0.0,      # Minimum loss reduc req'd to again partition a leaf node. higher number ~ more conservative (xgboost parameter)
-                 lambda=1.0,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
-                 alpha=0.0,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+                 gamma=0.2,      # Minimum loss reduc req'd to again partition a leaf node. higher number ~ more conservative (xgboost parameter)
+                 lambda=1.2,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
+                 alpha=0.2,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
                  verbose=0,
                  train_perc=0.8,
                  combine_function='median',
@@ -129,15 +129,17 @@ imp_list
 
 ```{r}
 
-df1 <- data.frame(Top15=1:15, Cluster='cluster1',imp_list[['cluster1']][1:15,])
-df2 <- data.frame(Top15=1:15, Cluster='cluster2',imp_list[['cluster2']][1:15,])
-df3 <- data.frame(Top15=1:15, Cluster='cluster3',imp_list[['cluster3']][1:15,])
-df4 <- data.frame(Top15=1:15, Cluster='cluster4',imp_list[['cluster4']][1:15,])
-df5 <- data.frame(Top15=1:15, Cluster='cluster5',imp_list[['cluster5']][1:15,])
+df1 <- data.frame(Top10=1:10, Cluster='cluster1',imp_list[['cluster1']][1:10,])
+df2 <- data.frame(Top10=1:10, Cluster='cluster2',imp_list[['cluster2']][1:10,])
+df3 <- data.frame(Top10=1:10, Cluster='cluster3',imp_list[['cluster3']][1:10,])
+df4 <- data.frame(Top10=1:10, Cluster='cluster4',imp_list[['cluster4']][1:10,])
+df5 <- data.frame(Top10=1:10, Cluster='cluster5',imp_list[['cluster5']][1:10,])
 
 impdf <- rbind(df1[,c(1,2,4)],df2[,c(1,2,4)],df3[,c(1,2,4)],df4[,c(1,2,4)],df5[,c(1,2,4)])
 
-colnames(impdf) <- c('Top15','Cluster','Med_Info_Gain')
+colnames(impdf) <- c('Top10','Cluster','Med_Info_Gain')
+
+
 
 #ggplot(impdf, aes(Top15)) + 
 #  geom_line(aes(y=cluster1),color="black") +
@@ -148,9 +150,13 @@ colnames(impdf) <- c('Top15','Cluster','Med_Info_Gain')
 #  xlab('Top 15 gene pairs') + 
 #  ylab('Median information gain')
 
-ggplot(impdf, aes(x=Top15,y=Med_Info_Gain,color=Cluster)) + geom_line()
+ggplot(impdf, aes(x=Top10,y=Med_Info_Gain,color=Cluster)) + geom_line() + 
+  xlab("Top 10 features per cluster") + ylab("Median Information Gain")
 
 
+allimp <- rbind(df1,df2,df3,df4,df5)
+
+write.csv(allimp, file='../results/male_importance_table.csv')
 
 ```
 
@@ -235,13 +241,13 @@ buffy <- Robencla$new("buffy")
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
 params <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
-                 eta=0.3,        # this is the learning rate. smaller values slow it down, more conservative   (xgboost parameter)
-                 nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+                 eta=0.2,        # this is the learning rate. smaller values slow it down, more conservative   (xgboost parameter)
+                 nrounds=64,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
                  early_stopping_rounds=2,
                  nthreads=5,     # parallel threads
-                 gamma=0.0,      # Minimum loss reduc req'd to again partition a leaf node. higher number ~ more conservative (xgboost parameter)
-                 lambda=1.0,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
-                 alpha=0.0,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+                 gamma=0.2,      # Minimum loss reduc req'd to again partition a leaf node. higher number ~ more conservative (xgboost parameter)
+                 lambda=1.2,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
+                 alpha=0.2,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
                  verbose=0,
                  train_perc=0.8,
                  combine_function='median',
@@ -310,15 +316,15 @@ imp_list
 
 ```{r}
 
-df1 <- data.frame(Top15=1:15, Cluster='cluster1',imp_list[['cluster1']][1:15,])
-df2 <- data.frame(Top15=1:15, Cluster='cluster2',imp_list[['cluster2']][1:15,])
-df3 <- data.frame(Top15=1:15, Cluster='cluster3',imp_list[['cluster3']][1:15,])
-df4 <- data.frame(Top15=1:15, Cluster='cluster4',imp_list[['cluster4']][1:15,])
-df5 <- data.frame(Top15=1:15, Cluster='cluster5',imp_list[['cluster5']][1:15,])
+df1 <- data.frame(Top10=1:10, Cluster='cluster1',imp_list[['cluster1']][1:10,])
+df2 <- data.frame(Top10=1:10, Cluster='cluster2',imp_list[['cluster2']][1:10,])
+df3 <- data.frame(Top10=1:10, Cluster='cluster3',imp_list[['cluster3']][1:10,])
+df4 <- data.frame(Top10=1:10, Cluster='cluster4',imp_list[['cluster4']][1:10,])
+df5 <- data.frame(Top10=1:10, Cluster='cluster5',imp_list[['cluster5']][1:10,])
 
 impdf <- rbind(df1[,c(1,2,4)],df2[,c(1,2,4)],df3[,c(1,2,4)],df4[,c(1,2,4)],df5[,c(1,2,4)])
 
-colnames(impdf) <- c('Top15','Cluster','Med_Info_Gain')
+colnames(impdf) <- c('Top10','Cluster','Med_Info_Gain')
 
 #ggplot(impdf, aes(Top15)) + 
 #  geom_line(aes(y=cluster1),color="black") +
@@ -329,9 +335,16 @@ colnames(impdf) <- c('Top15','Cluster','Med_Info_Gain')
 #  xlab('Top 15 gene pairs') + 
 #  ylab('Median information gain')
 
-ggplot(impdf, aes(x=Top15,y=Med_Info_Gain,color=Cluster)) + geom_line()
+ggplot(impdf, aes(x=Top10,y=Med_Info_Gain,color=Cluster)) + geom_line() + 
+  xlab("Top 10 features per cluster") + ylab("Median Information Gain")
 
 
+
+load('../results/female_CV_pairs_importance_step4.rda')
+
+allimp <- rbind(df1,df2,df3,df4,df5)
+
+write.csv(allimp, file='../results/female_importance_table.csv')
 
 ```
 
