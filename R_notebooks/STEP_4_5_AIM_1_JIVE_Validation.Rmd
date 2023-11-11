@@ -16,12 +16,58 @@ if (!require("BiocManager", quietly = TRUE))
 
 BiocManager::install("GEOquery")
 
+devtools::install_github("gibbsdavidl/robencla", force = T)
+
 library(GEOquery)
 
 library(org.Hs.eg.db)
 ```
 
 ## JIVE Validation
+
+
+First training the full model with all data.
+```{r}
+
+library(readr)
+library(robencla)
+
+dat_m <- read_csv('../data/Males_Array_Data.csv.gz')
+
+load("../results/males_genepairs.rda")
+
+# xgboost parameters to pass to each sub-classifier in the ensembles
+params <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+                 eta=0.2,        # this is the learning rate. smaller values slow it down, more conservative   (xgboost parameter)
+                 nrounds=64,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+                 early_stopping_rounds=2,
+                 nthreads=5,     # parallel threads
+                 gamma=0.2,      # Minimum loss reduc req'd to again partition a leaf node. higher number ~ more conservative (xgboost parameter)
+                 lambda=1.2,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
+                 alpha=0.2,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+                 verbose=0,
+                 train_perc=0.8,
+                 combine_function='median',
+                 size=11
+  )
+
+mod_m <- robencla::Robencla$new('m_model')
+
+mod_m$train(data_frame=dat_m,
+            label_name='cluster_group',
+            sample_id = 'sample',
+            data_mode=c('pairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
+            signatures=NULL,
+            pair_list=genepairs,  # subset to these genes.
+            params=params
+            )
+
+save(mod_m, file='../models/males_tcga_array_step4_5.rda')
+
+```
+
+
+
 
 In the JIVE manuscript, there are three array expression data sets used for validation:
  GSE13041, GSE16011, and REMBRANDT
@@ -39,6 +85,12 @@ gsetPheno <- read_delim('../data/validation_metadata/GBM_meta_analysis.txt')
 
 save(gset13041, gset16011, file = '../data/jive_validation_array_data.rda')
 
+```
+
+
+```{r}
+
+load('../data/jive_validation_array_data.rda')
 
 # make proper column names to match toptable 
 fvarLabels(gset13041[[1]]) <- make.names(fvarLabels(gset13041[[1]]))
@@ -87,31 +139,107 @@ pdf3 <- phenotype_data3[, c('geo_accession', 'characteristics_ch1.1', 'character
 Then we need to convert the probeIDs to gene symbols
 
 
-
-
 ```{r}
+library(robencla)
 
 # load up the model
-load('../models/females_tcga_array_step4.rda')
+load('../models/males_tcga_array_step4_5.rda')
 
 # load up the gene pairs used
-load('../results/females_genepairs.rda')
+load('../results/males_genepairs.rda')
 
 # check what genes might be missing
 unlist(genepairs) [! unlist(genepairs) %in% colnames(df1) ]
+
+# for females
 # cluster23 cluster213 
 #   "PTCD1"     "CCT3" 
 
-expr1 <- df1
 
-colnames(expr1)[6]  <- "PTCD1"
+# for males
+#cluster113  cluster28 cluster210  cluster46 
+#     "CIT"    "TMED7"   "CHMP4A"    "PFDN6" 
 
-colnames(expr1)[7]  <- "CCT3"    
+CIT_alias <- c("CIT", 'STK21', 'CRIK', 'KIAA0949', 'CITK', 'MCPH17') 
 
-unlist(genepairs) [! unlist(genepairs) %in% colnames(expr1) ]
+sapply(CIT_alias, function(a) {
+  any(str_detect(string = colnames(df1), pattern=a))
+})
 
-buffy$predict(data_frame = expr1,
-              sample_id = 'sample')
+colnames(df1) [
+  which(str_detect(string = colnames(df1), pattern="CIT"))
+]
+
+which(str_detect(string = colnames(df1), pattern="CIT"))
+
+colnames(df1)[22107] <- "CIT"
+
+
+
+TMED7_alias <- c("TMED7") 
+
+sapply(TMED7_alias, function(a) {
+  any(str_detect(string = colnames(df1), pattern=a))
+})
+
+colnames(df1) [
+  which(str_detect(string = colnames(df1), pattern="TMED7"))
+]
+
+which(str_detect(string = colnames(df1), pattern="TMED7"))
+
+colnames(df1)[18818] <- "TMED7"
+
+
+
+
+TMED7_alias <- c("PFDN6") 
+
+sapply(TMED7_alias, function(a) {
+  any(str_detect(string = colnames(df1), pattern=a))
+})
+
+colnames(df1) [
+  which(str_detect(string = colnames(df1), pattern="PFDN6"))
+]
+
+which(str_detect(string = colnames(df1), pattern="PFDN6"))
+
+colnames(df1)[31300] <- "PFDN6"
+
+
+
+
+CHMP4A_alias <- c("CHMP4A") 
+
+sapply(CHMP4A_alias, function(a) {
+  any(str_detect(string = colnames(df1), pattern=a))
+})
+
+colnames(df1) [
+  which(str_detect(string = colnames(df1), pattern="CHMP4A"))
+]
+
+which(str_detect(string = colnames(df1), pattern="CHMP4A"))
+
+colnames(df1)[27857] <- "CHMP4A"
+
+
+expr1 <- df1[, unique(unlist(genepairs))]
+
+expr1[["sample"]] <- rownames(expr1)
+
+
+save(expr1, file='../data/df1.rda')
+
+load('../data/df1.rda')
+
+
+mod_m$predict(data_frame = expr1, sample_id = 'sample')
+
+mod_m$pred_table
+
+mod_m$results()$BestCall
    
 ```
 
