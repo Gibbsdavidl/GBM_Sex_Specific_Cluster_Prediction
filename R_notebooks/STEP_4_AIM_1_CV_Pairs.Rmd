@@ -257,6 +257,26 @@ params <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I t
 
 ```{r}
 
+
+buffy$train(data_frame=dat.f,
+            label_name='cluster_group',
+            sample_id = 'sample',
+            data_mode=c('pairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
+            signatures=NULL,
+            pair_list=genepairs,  # subset to these genes.
+            params=params
+            )
+
+```
+```{r}
+buffy$predict(data_frame = dat.f, label_name = 'cluster_group', sample_id = 'sample')
+
+table(dat.f$cluster.group, buffy$results()$BestCall)
+```
+
+
+```{r}
+
 # First we use the training data
 buffy$autocv(data_frame=dat.f,
             label_name='cluster_group',
