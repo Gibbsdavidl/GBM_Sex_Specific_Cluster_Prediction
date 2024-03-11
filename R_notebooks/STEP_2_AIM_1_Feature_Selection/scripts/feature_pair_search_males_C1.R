@@ -2,14 +2,14 @@
 #library(tidyverse)
 
 ## MALES OR FEMALES
-dat <- read.csv('version3/Males_CV_Data_v3.csv')
-#dat <- read_csv('version3/Females_CV_Data_v3_GC.csv')
+load('data/jive_training_array_data_M.rda')
+dat <- jive_train_array_M
 
 ## We will work on one cluster at a time.
 labels <- c('cluster1','cluster2','cluster3','cluster4','cluster5')
 
 # number of genes in the table
-ngenes <- ncol(dat)
+ngenes <- ncol(dat) - 160
 
 # the pair count/index
 k <- 1
@@ -21,8 +21,8 @@ resl <- list()
 this_label <- labels[1]
 
 #  index into this cluster
-idx <- dat$cluster.group == this_label
-jdx <- dat$cluster.group != this_label
+idx <- dat$ClusterLabel == this_label
+jdx <- dat$ClusterLabel != this_label
 
 labdat <- dat[idx,]
 notdat <- dat[jdx,]

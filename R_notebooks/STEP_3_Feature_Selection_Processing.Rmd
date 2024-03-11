@@ -13,61 +13,57 @@ library(tidyverse)
 
 ```{r}
 
-array_m <- read.csv('../data/Male_Feature_Search_Data.csv.gz')
+array_m <- read_csv('../data/jive_training_array_data_M.csv')
 
 resdf_m <- read_csv('../results/feature_selection_table_male.csv')
 
+resdf_m <- resdf_m[!resdf_m$gene_i %in% 14454:14456, ]
+resdf_m <- resdf_m[!resdf_m$gene_j %in% 14454:14456, ]
+
 table(resdf_m$cluster)
+
+# drop the first column of row numbers
+array_m <- array_m[,-1]
+
 
 ```
 
+With the threshold held across clusters
+cluster1 cluster2 cluster3 cluster4 cluster5 
+       9        5      316      660    25568 
+
+
 ```{r}
 
-# first get the min values for each gene
-minExprVals <- sapply (2:10343, function(i) {
-  gene <- colnames(array_m)[i]
-  min(array_m[,i])
-})
+# don't count the annotation columns at the end
+array_ncol <- ncol(array_m)-3
 
-names(minExprVals) <- colnames(array_m)[2:10343]
+# first get the min value for each gene in the array data
+minExprVals <- apply(array_m[,1:array_ncol], 2, min, na.rm=T)
 
-# not used, but have the names of genes with min expr values over 4.6
-selected_genes <- names(minExprVals)[minExprVals > 4.6]
+# first get the min value for each gene in the array data
+medExprVals <- apply(array_m[,1:array_ncol], 2, median, na.rm=T)
 
-# get the names of genes from the array data
-getgenecols <- function(gene_i, gene_j, array_m, x)  {
-  gene_names <- colnames(array_m)[c(gene_i, gene_j)]
-  return(gene_names)
-}
+# get gene IDs from the array
+genesi <- colnames(array_m)[resdf_m$gene_i]
+genesj <- colnames(array_m)[resdf_m$gene_j]
 
-# get the min values for those gene pairs
-makenewcols <- function(gene_i, gene_j, array_m, x)  {
-  gene_names <- colnames(array_m)[c(gene_i, gene_j)]
-  minvals <- x[gene_names]
-  return(minvals)
-}
+# get the medians and mins out
+medi <- medExprVals[resdf_m$gene_i]
+medj <- medExprVals[resdf_m$gene_j]
+mini <- minExprVals[resdf_m$gene_i]
+minj <- minExprVals[resdf_m$gene_j]
 
-# call the function
-minvallist <- lapply(1:nrow(resdf_m), function(i) {
-  makenewcols(unlist(resdf_m[i, 'gene_i']), unlist(resdf_m[i, 'gene_j']), array_m, minExprVals)
-})
 
-# call function
-genelist <- lapply(1:nrow(resdf_m), function(i) {
-  getgenecols(unlist(resdf_m[i, 'gene_i']), unlist(resdf_m[i, 'gene_j']), array_m, minExprVals)
-})
-
-# transform into tables
-minvalmat <- do.call('rbind', minvallist)
-genemat <- do.call('rbind', genelist)
-
-# and add to the pairs table
 annotdf_m <- resdf_m
-annotdf_m['gene_i_symbol'] <- genemat[,1]
-annotdf_m['gene_j_symbol'] <- genemat[,2]
-annotdf_m['gene_i_min'] <- minvalmat[,1]
-annotdf_m['gene_j_min'] <- minvalmat[,2]
+annotdf_m['gene_i_symbol'] <- genesi
+annotdf_m['gene_j_symbol'] <- genesj
+annotdf_m['gene_i_min'] <- mini
+annotdf_m['gene_j_min'] <- minj
+annotdf_m['gene_i_med'] <- medi
+annotdf_m['gene_j_med'] <- medj
 
+write.csv(annotdf_m, file = '../results/annotdf_m.csv')
 
 ```
 
@@ -77,11 +73,22 @@ annotdf_m['gene_j_min'] <- minvalmat[,2]
 
 getpairs <- function(pairmat, cluster_c, thresh, topn) {
 
+    #pairmat <- na.omit(pairmat)
+  
+    # remove unknown genes
+    idx <- !str_detect(pairmat$gene_i_symbol,'unknown_')
+    jdx <- !str_detect(pairmat$gene_j_symbol,'unknown_')
+    pairmat <- pairmat[idx&jdx,]
+  
+    filtmat <- pairmat[(pairmat$cluster == cluster_c), ]
     # first filter the table by min expression value
-    filtmat <- pairmat[ (pairmat$gene_i_min > thresh) & (pairmat$gene_j_min > thresh) & (pairmat$cluster == cluster_c), ]
+    #filtmat <- pairmat[ (pairmat$gene_i_min > thresh) & 
+    #                      (pairmat$gene_j_min > thresh) & 
+    #                      (pairmat$cluster == cluster_c), ]
     
     #idx <- order(filtmat$dist_ij_cluster, decreasing = T)[1:topn]
     #jdx <- order(filtmat$dist_ij_cluster, decreasing = F)[1:topn]
+    topn <- min(topn, nrow(filtmat))
     idx <- order(filtmat$prop_diff, decreasing = T)[1:topn]
     jdx <- order(filtmat$prop_diff, decreasing = F)[1:topn]
 
@@ -100,22 +107,86 @@ getpairs <- function(pairmat, cluster_c, thresh, topn) {
 }
 
 genepairs <- list(
-  'cluster1'=getpairs(annotdf_m, 'cluster1', 4.6, 5),
-  'cluster2'=getpairs(annotdf_m, 'cluster2', 4.6, 5),
-  'cluster3'=getpairs(annotdf_m, 'cluster3', 4.4, 5),
-  'cluster4'=getpairs(annotdf_m, 'cluster4', 4.6, 5),
-  'cluster5'=getpairs(annotdf_m, 'cluster5', 4.5, 5)
+  'cluster1'=getpairs(annotdf_m, 'cluster1', 0, 10),
+  'cluster2'=getpairs(annotdf_m, 'cluster2', 0, 10),
+  'cluster3'=getpairs(annotdf_m, 'cluster3', 0, 10),
+  'cluster4'=getpairs(annotdf_m, 'cluster4', 0, 10),
+  'cluster5'=getpairs(annotdf_m, 'cluster5', 0, 10)
 )
 
 ```
 
 ```{r}
-genepairs
+
+# getting the gene pairs mapped correctly to symbols.
+
+library(org.Hs.eg.db)
+
+# fix the symbols with multi-maps
+genepairs$cluster1[1]   <-"PLGLB2"
+genepairs$cluster1[31]  <- "PLGLB2"
+
+# for each cluster set, map to correct symbols
+symbolpairs <- lapply(genepairs,
+                      function(x) {
+                        select(org.Hs.eg.db,
+                               keys =  x,
+                               columns=c("ENTREZID","SYMBOL"),
+                               keytype="ALIAS")
+                        
+                      })
+
+symbolpairs[["cluster1"]] <- symbolpairs[["cluster1"]][!symbolpairs$cluster1$ENTREZID %in% c(79947,23173),] 
+
+symbolpairs[["cluster2"]]  # OK
+
+symbolpairs[["cluster3"]] <- symbolpairs[["cluster3"]][!symbolpairs$cluster3$ENTREZID %in% c(92856),] # map IMP4 to SPPL2B
+
+symbolpairs[["cluster4"]] <- symbolpairs[["cluster4"]][!symbolpairs$cluster4$ENTREZID %in% c(57147, 4669),] # map SCYL3 to CCL15
+symbolpairs[["cluster4"]][symbolpairs$cluster4$ALIAS == 'KIAA0404','SYMBOL'] <- 'ATG2A'
+symbolpairs[["cluster4"]][symbolpairs$cluster4$ALIAS == 'KIAA0664','SYMBOL'] <- 'CLUH'
+symbolpairs[["cluster4"]][symbolpairs$cluster4$ALIAS == 'LOC63920','SYMBOL'] <- 'IRF8' 
+
+
+symbolpairs[["cluster5"]] <- symbolpairs[["cluster5"]][!symbolpairs$cluster5$ENTREZID %in% c(770,100526739,51514,885,27165),] # map CA11 to GKN1, DTL to TNFSF13B, map CCK to RIPK2
+symbolpairs[["cluster5"]][symbolpairs$cluster5$ALIAS == 'MGC39900','SYMBOL'] <- 'TMSB15B'
+ 
+
+genepairs <- lapply(symbolpairs, function(x) x$SYMBOL)
+
 ```
 
 ```{r}
+
+### Fix the gene names on the array now###
+
+# first get the alias to symbol table 
+fullmap <- rbind(symbolpairs$cluster1,symbolpairs$cluster2,
+                 symbolpairs$cluster3, symbolpairs$cluster4,
+                 symbolpairs$cluster5)
+fullmap <- unique(fullmap)
+
+# fix the multi-mapping colnames
+which(str_detect(colnames(array_m), 'PLGLB2')) # 4099
+colnames(array_m)[4099] <- "PLGLB2"
+
+# for each alias, map in the correct symbol
+for (i in 1:nrow(fullmap)){
+  ai <- fullmap$ALIAS[i]
+  si <- fullmap$SYMBOL[i]
+  idx <- which(colnames(array_m) == ai) 
+  print(paste0(ai, "  replaceing ", as.character(length(idx)), '  ', si))
+  colnames(array_m)[idx] <- si
+}
+
+write_csv(array_m, file='../data/jive_training_array_data_M_v2.csv')
 save(genepairs, file='../results/males_genepairs.rda')
 ```
+
+
+
+
+
 
 
 
@@ -125,66 +196,59 @@ save(genepairs, file='../results/males_genepairs.rda')
 
 
 
+
 ```{r}
 ### PULLING OUT SOME GENES
 
-array_f  <- read.csv('../data/Female_Feature_Search_Data.csv.gz')
+array_f  <- read_csv('../data/jive_training_array_data_F.csv')
 
 resdf_f <- read_csv('../results/feature_selection_table_female.csv')
+resdf_f <- resdf_f[!resdf_f$gene_i %in% 14454:14456, ]
+resdf_f <- resdf_f[!resdf_f$gene_j %in% 14454:14456, ]
+
+# remove RP11-35N6.1 # a pseudogene that ranks high
+resdf_f <- resdf_f[ (resdf_f$gene_i != 12422) & (resdf_f$gene_j != 12422), ]
+
+# drop the first column of row numbers
+array_f <- array_f[,-1]
 
 table(resdf_f$cluster)
 
 ```
 
 ```{r}
+
+
+# don't count the annotation columns at the end
+array_ncol <- ncol(array_f)-3
+
 # first get the min value for each gene in the array data
-minExprVals <- sapply (2:10343, function(i) {
-  gene <- colnames(array_f)[i]
-  min(array_f[,i])
-})
+minExprVals <- apply(array_f[,1:array_ncol], 2, min, na.rm=T)
 
-names(minExprVals) <- colnames(array_f)[2:10343]  # last col is cluster ID
+# first get the min value for each gene in the array data
+medExprVals <- apply(array_f[,1:array_ncol], 2, median, na.rm=T)
 
+# get gene IDs from the array
+genesi <- colnames(array_f)[resdf_f$gene_i]
+genesj <- colnames(array_f)[resdf_f$gene_j]
 
-selected_genes <- names(minExprVals)[minExprVals > 4.6]
-
-
-getgenecols <- function(gene_i, gene_j, array_f, x)  {
-  gene_names <- colnames(array_f)[c(gene_i, gene_j)]
-  return(gene_names)
-}
-
-
-makenewcols <- function(gene_i, gene_j, array_f, x)  {
-  gene_names <- colnames(array_f)[c(gene_i, gene_j)]
-  minvals <- minExprVals[gene_names]
-  return(minvals)
-}
-
-
-minvallist <- lapply(1:nrow(resdf_f), function(i) {
-  makenewcols(unlist(resdf_f[i, 'gene_i']), unlist(resdf_f[i, 'gene_j']), array_f, minExprVals)
-})
-
-
-genelist <- lapply(1:nrow(resdf_f), function(i) {
-  getgenecols(unlist(resdf_f[i, 'gene_i']), unlist(resdf_f[i, 'gene_j']), array_f, minExprVals)
-})
-
-
-minvalmat <- do.call('rbind', minvallist)
-genemat <- do.call('rbind', genelist)
+# get the medians and mins out
+medi <- medExprVals[resdf_f$gene_i]
+medj <- medExprVals[resdf_f$gene_j]
+mini <- minExprVals[resdf_f$gene_i]
+minj <- minExprVals[resdf_f$gene_j]
 
 
 annotdf_f <- resdf_f
-annotdf_f['gene_i_symbol'] <- genemat[,1]
-annotdf_f['gene_j_symbol'] <- genemat[,2]
-annotdf_f['gene_i_min'] <- minvalmat[,1]
-annotdf_f['gene_j_min'] <- minvalmat[,2]
+annotdf_f['gene_i_symbol'] <- genesi
+annotdf_f['gene_j_symbol'] <- genesj
+annotdf_f['gene_i_min'] <- mini
+annotdf_f['gene_j_min'] <- minj
+annotdf_f['gene_i_med'] <- medi
+annotdf_f['gene_j_med'] <- medj
 
-
+write.csv(annotdf_f, file = '../results/annotdf_f.csv')
 ```
-
 
 
 
@@ -197,11 +261,22 @@ annotdf_f['gene_j_min'] <- minvalmat[,2]
 
 getpairs <- function(pairmat, cluster_c, thresh, topn) {
 
+    #pairmat <- na.omit(pairmat)
+  
+    # remove unknown genes
+    idx <- !str_detect(pairmat$gene_i_symbol,'unknown_')
+    jdx <- !str_detect(pairmat$gene_j_symbol,'unknown_')
+    pairmat <- pairmat[idx&jdx,]
+  
+    filtmat <- pairmat[(pairmat$cluster == cluster_c), ]
     # first filter the table by min expression value
-    filtmat <- pairmat[ (pairmat$gene_i_min > thresh) & (pairmat$gene_j_min > thresh) & (pairmat$cluster == cluster_c), ]
+    #filtmat <- pairmat[ (pairmat$gene_i_min > thresh) & 
+    #                      (pairmat$gene_j_min > thresh) & 
+    #                      (pairmat$cluster == cluster_c), ]
     
     #idx <- order(filtmat$dist_ij_cluster, decreasing = T)[1:topn]
     #jdx <- order(filtmat$dist_ij_cluster, decreasing = F)[1:topn]
+    topn <- min(topn, nrow(filtmat))
     idx <- order(filtmat$prop_diff, decreasing = T)[1:topn]
     jdx <- order(filtmat$prop_diff, decreasing = F)[1:topn]
     
@@ -220,21 +295,124 @@ getpairs <- function(pairmat, cluster_c, thresh, topn) {
 }
 
 genepairs <- list(
-  'cluster1'=getpairs(annotdf_f, 'cluster1', 4.6, 5),
-  'cluster2'=getpairs(annotdf_f, 'cluster2', 4.6, 5),
-  'cluster3'=getpairs(annotdf_f, 'cluster3', 4.6, 5),
-  'cluster4'=getpairs(annotdf_f, 'cluster4', 4.2, 5),
-  'cluster5'=getpairs(annotdf_f, 'cluster5', 4.6, 5)
+  'cluster1'=getpairs(annotdf_f, 'cluster1', 4.6, 10),
+  'cluster2'=getpairs(annotdf_f, 'cluster2', 4.6, 10),
+  'cluster3'=getpairs(annotdf_f, 'cluster3', 4.6, 10),
+  'cluster4'=getpairs(annotdf_f, 'cluster4', 4.2, 10),
+  'cluster5'=getpairs(annotdf_f, 'cluster5', 4.6, 10)
 )
 
 ```
 
 ```{r}
-genepairs
+
+
+# getting the gene pairs mapped correctly to symbols.
+
+library(org.Hs.eg.db)
+
+$cluster5
+[1] "STEEP1"
+
+colnames(array_f)[ which(str_detect(colnames(array_f), 'PHLDA1')) ]
+
+# fix the symbols with multi-maps
+genepairs$cluster1[12] <- 'GRINL1A' # "GRINL1A /// Gcom1 /// LOC339970" ## Symbol POLR2M
+colnames(array_f)[c(8067, 8069)] <- c('POLR2M', 'GRINL1A_2')
+
+genepairs$cluster1[28] <- 'THSD1'  # "THSD1 /// THSD1P"  ## symbol THSD1
+colnames(array_f)[c(12195)] <- c('THSD1')
+
+genepairs$cluster2[24] <- 'CDC2L1'  # "CDC2L1 /// LOC728642"  # symbol CDK11B 
+genepairs$cluster2[38] <- 'FAM86B1' # "FAM86C /// FAM86B1 /// LOC348926 /// LOC645332 /// ... FAM86D...
+colnames(array_f)[c(5492, 7502, 7752)] <- c('CDK11B', 'CDC2L2', 'CDC2L2_2')
+
+genepairs$cluster3[36] <- 'JAKMIP2'  # "JAKMIP2 /// MYT1L"
+colnames(array_f)[c(4114, 4115)] <- c('JAKMIP2', 'JAKMIP2_2')
+
+genepairs$cluster5[8]  <- 'DND1' #"DND1 /// LOC644157 /// LOC644256 /// LOC649072"
+genepairs$cluster5[10] <- 'CXorf56' #"CXorf56 /// LOC728024 /// LOC731173"
+genepairs$cluster5[11] <- 'PHLDA1' #"PHLDA1 /// LOC652993"
+genepairs$cluster5[20] <- 'DND1' #"DND1 /// LOC644157 /// LOC644256 /// LOC649072"
+genepairs$cluster5[32] <- 'PHLDA1' #"PHLDA1 /// LOC652993"
+colnames(array_f)[c(6630, 14227, 14390)] <- c('CLDND1', 'DND1', 'DND1_2')
+colnames(array_f)[c(12486)] <- c('STEEP1')
+colnames(array_f)[c(10876, 10877)] <- c('PHLDA1', 'PHLDA1_2')
+
+
+# for each cluster set, map to correct symbols
+symbolpairs <- lapply(genepairs,
+                      function(x) {
+                        select(org.Hs.eg.db,
+                               keys =  x,
+                               columns=c("ENTREZID","SYMBOL"),
+                               keytype="ALIAS")
+                        
+                      })
+#<- 
+symbolpairs[["cluster1"]] <- symbolpairs[["cluster1"]][!symbolpairs$cluster1$ENTREZID %in% c(145781),] 
+
+symbolpairs[["cluster2"]] <- symbolpairs[["cluster2"]][!symbolpairs$cluster2$ENTREZID %in% c(56246,619477),] 
+## 214101_s_at maps to BG153399, LOC728896, entrez id = 728896   NPEPPS
+symbolpairs[["cluster2"]][symbolpairs$cluster2$ALIAS == 'LOC728896', 'SYMBOL'] <- 'NPEPPS'
+
+symbolpairs[["cluster3"]] <- symbolpairs[["cluster3"]][!symbolpairs$cluster3$ENTREZID %in% c(54453,5926),] 
+
+symbolpairs[["cluster4"]] <- symbolpairs[["cluster4"]][!symbolpairs$cluster4$ENTREZID %in% c(4571,51026, 127845  ),] 
+
+symbolpairs[["cluster5"]] <- symbolpairs[["cluster5"]][!symbolpairs$cluster5$ENTREZID %in% c(176),] 
+#LOC388969, LOC728896      
+symbolpairs[["cluster5"]][symbolpairs$cluster5$ALIAS == 'LOC728896', 'SYMBOL'] <- 'NPEPPS'
+symbolpairs[["cluster5"]][symbolpairs$cluster5$ALIAS == 'LOC388969', 'SYMBOL'] <- 'C2orf68' 
+
+
+genepairs <- lapply(symbolpairs, function(x) x$SYMBOL)
+
 ```
 
 
 ```{r}
+
+### Fix the gene names in the array ###
+
+
+### Fix the gene names on the array now###
+
+# first get the alias to symbol table 
+fullmap <- rbind(symbolpairs$cluster1,symbolpairs$cluster2,
+                 symbolpairs$cluster3, symbolpairs$cluster4,
+                 symbolpairs$cluster5)
+fullmap <- unique(fullmap)
+
+fullmap
+
+# fix the multi-mapping colnames
+#which(str_detect(colnames(array_m), 'PLGLB2')) # 4099
+#colnames(array_m)[4099] <- "PLGLB2"
+
+# for each alias, map in the correct symbol
+for (i in 1:nrow(fullmap)){
+  ai <- fullmap$ALIAS[i]
+  si <- fullmap$SYMBOL[i]
+  idx <- which(colnames(array_f) == ai) 
+  print(paste0(ai, "  replaceing ", as.character(length(idx)), '  ', si))
+  colnames(array_f)[idx] <- si
+}
+
+write_csv(array_f, file='../data/jive_training_array_data_F_v2.csv')
 save(genepairs, file='../results/females_genepairs.rda')
+
 ```
 
+```{r}
+
+# from the raw results pair table
+#i <- 3654
+#j <- 8660
+#resdf_f[(resdf_f$gene_i == 3654) & (resdf_f$gene_j == 8660),]
+
+#annotdf_f[(resdf_f$gene_i == 3654) & (resdf_f$gene_j == 8660),]
+
+#       cluster  pair gene_i gene_j prop_this_cluster prop_not_cluster  dist_ij_cluster dist_ij_not_cluster prop_diff
+#65921 cluster3 65921   3654   8660                 1                0 4.59547434916667   -91.0549842018055         1
+```

@@ -14,14 +14,11 @@ knitr::opts_chunk$set(echo = TRUE)
 if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
-if (!require("GEOquery", quietly = TRUE))
-  BiocManager::install("GEOquery")
-
+if(!require("survminer", quietly = TRUE))
+  BiocManager::install("survminer")
+  
 devtools::install_github("gibbsdavidl/robencla", force = T)
 
-library(GEOquery)
-
-library(org.Hs.eg.db)
 ```
 
 ## JIVE Validation
@@ -33,17 +30,34 @@ First training the full model with all data.
 library(readr)
 library(robencla)
 
-dat_f <- read_csv('../data/Females_Array_Data.csv.gz')
+repair_ids <- function(pairslist) {
+  newlist <- list()
+  for (li in names(pairslist)) {
+    symbols <- pairslist[[li]]
+    newlist[[li]] <- str_replace_all(symbols, pattern=" /// ", replacement = '_///_')
+  }
+  return(newlist)
+}
+
+dat_f <- read_csv('../data/jive_training_array_data_F.csv')
 
 load("../results/females_genepairs.rda")
+genepairs$cluster1[4]  <- "RP11-35N6_1"
+genelist_f <- repair_ids(genepairs)
+
+# in case we want to test it #
+idx <- sample(1:nrow(dat_f), size=100, replace = F)
+jdx <- setdiff(1:nrow(dat_f), idx)
+train <- dat_f[idx,]
+test <- dat_f[jdx,]
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
 params <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
-                 eta=0.2,        # this is the learning rate. smaller values slow it down, more conservative   (xgboost parameter)
-                 nrounds=64,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+                 eta=0.3,        # this is the learning rate. smaller values slow it down, more conservative   (xgboost parameter)
+                 nrounds=12,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
                  early_stopping_rounds=2,
                  nthreads=5,     # parallel threads
-                 gamma=0.2,      # Minimum loss reduc req'd to again partition a leaf node. higher number ~ more conservative (xgboost parameter)
+                 gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
                  lambda=1.2,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
                  alpha=0.2,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
                  verbose=0,
@@ -55,11 +69,12 @@ params <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I t
 mod_f <- robencla::Robencla$new('f_model')
 
 mod_f$train(data_frame=dat_f,
-            label_name='cluster_group',
-            sample_id = 'sample',
+            label_name='ClusterLabel',
+            sample_id = 'Barcode',
             data_mode=c('pairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
+            drop_list = 'Sex',
             signatures=NULL,
-            pair_list=genepairs,  # subset to these genes.
+            pair_list=genelist_f,  # subset to these genes.
             params=params
             )
 
@@ -69,39 +84,201 @@ save(mod_f, file='../models/females_tcga_array_step4_5.rda')
 
 Check the model
 
-
 ```{r}
-load(file='../models/females_tcga_array_step4.rda')
+mod_f$predict(data_frame = dat_f,
+              sample_id = 'Barcode',
+              drop_list = 'Sex',
+              label_name = 'ClusterLabel')
 
-buffy$predict(data_frame = dat.f, sample_id = 'sample')
+table(mod_f$test_label, mod_f$results()$BestCall)  ## OK!
 
-table(dat.f$cluster.group, buffy$results()$BestCall)
+
+### DISCOVERY:  
+### The order of the data.frame does not match the order that is output in prediction results.
 
 ```
 
 
+In the JIVE manuscript, there are three array expression data sets used for validation:
+ GSE13041, GSE16011, and REMBRANDT
+
+See: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE55918
+https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE13041
+https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE16011
+https://link.springer.com/article/10.1007/s13402-014-0190-8#Sec20
 
 
-
-First training the full model with all data.
 ```{r}
 
-library(readr)
+load('../data/Array Data/expr_f_13041_3.rda')
+
+###
 library(robencla)
+
+
+### to run the model, we need the same column names as in the training data
+
+allgenes <- c(unlist(genelist_f))
+
+allgenes
+
+
+
+mod_f$predict(data_frame = expr_f, sample_id = 'sample')
+
+mod_f$pred_table
+
+mod_f$results()
+
+table(mod_f$results()$BestCall)
+## check results
+
+# get them reordered
+
+### selected females in order of results
+pheno3_reorg <- pheno3[mod_f$results()$SampleIDs,]
+
+resdf <- cbind(pheno3_reorg, mod_f$results())
+
+boxplot(resdf$days ~ resdf$BestCall, 
+        xlab='Model Prediction', ylab='Survival (days)')
+
+   
+# extra check
+
+c3_call <- ifelse(resdf$BestCall == 'cluster3', yes=1, no=0) #ifelse(mod_f$pred_table$cluster3 > 0.8, yes=1, no=0)
+
+boxplot(resdf$days ~ c3_call, 
+        xlab='Model Prediction', ylab='Survival (days)')
+
+library(survival)
+library(survminer)
+
+modfit <- survfit(Surv(days,status)~BestCalls,data=resdf)
+
+ggsurvplot(modfit, pval = T)
+
+```
+
+
+males
+
+```{r}
+
+load('../data/validation_array_data/pheno13041.rda')
+
+load('../data/validation_array_data/GSE13041_mat3.rda')
+
+# load up the gene pairs used
+load('../results/males_genepairs.rda')
+
+
+# check what genes might be missing
+unlist(genepairs) [! unlist(genepairs) %in% colnames(mat3) ]
+
+# for males
+#cluster113  cluster28 cluster210  cluster46 
+#     "CIT"    "TMED7"   "CHMP4A"    "PFDN6" 
+
+CIT_alias <- c("CIT", 'STK21', 'CRIK', 'KIAA0949', 'CITK', 'MCPH17') 
+
+sapply(CIT_alias, function(a) {
+  any(str_detect(string = colnames(mat3), pattern=a))
+})
+
+colnames(mat3) [
+  which(str_detect(string = colnames(mat3), pattern="CIT"))
+]
+
+which(str_detect(string = colnames(mat3), pattern="CIT"))
+ 
+colnames(mat3)[12186] <- "CIT"  #  "MIR1178///CIT" 
+
+
+
+TMED7_alias <- c("TMED7") 
+
+sapply(TMED7_alias, function(a) {
+  any(str_detect(string = colnames(mat3), pattern=a))
+})
+
+colnames(mat3) [
+  which(str_detect(string = colnames(mat3), pattern="TMED7"))
+]
+
+which(str_detect(string = colnames(mat3), pattern="TMED7"))
+
+cor(mat3[,8897], mat3[,14034])
+
+#8897, 14034
+colnames(mat3)[14034] <- "TMED7"  # "TMED7-TICAM2///TMED7"
+
+
+
+TMED7_alias <- c("PFDN6") 
+
+sapply(TMED7_alias, function(a) {
+  any(str_detect(string = colnames(mat3), pattern=a))
+})
+
+colnames(mat3) [
+  which(str_detect(string = colnames(mat3), pattern="PFDN6"))
+]
+
+which(str_detect(string = colnames(mat3), pattern="PFDN6"))
+#21379 21389
+colnames(mat3)[21389] <- "PFDN6"  # "MIR6834///PFDN6" 
+
+
+
+CHMP4A_alias <- c("CHMP4A") 
+
+sapply(CHMP4A_alias, function(a) {
+  any(str_detect(string = colnames(mat3), pattern=a))
+})
+
+colnames(mat3) [
+  which(str_detect(string = colnames(mat3), pattern="CHMP4A"))
+]
+
+which(str_detect(string = colnames(mat3), pattern="CHMP4A"))
+#17936 17937
+colnames(mat3)[17937] <- "CHMP4A" # "CHMP4A///TM9SF1"
+
+
+
+### build the data set with the gene pairs
+
+expr_m <- mat3[, unique(unlist(genepairs))]
+expr_m[["sample"]] <- rownames(expr_m)
+
+
+### split into male and females
+
+m_idx <- which(pheno3$sex == 'gender: M')
+
+m_ids <- pheno3$id[pheno3$sex == 'gender: M']
+
+expr_m <- expr_m[m_ids,]
+
+# save data
+save(expr_m, file='../data/GSE13041_mat3_m.rda.rda')
+
+
+###
+
 
 dat_m <- read_csv('../data/Males_Array_Data.csv.gz')
 
-load("../results/males_genepairs.rda")
-
 # xgboost parameters to pass to each sub-classifier in the ensembles
-params <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+params <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
                  eta=0.2,        # this is the learning rate. smaller values slow it down, more conservative   (xgboost parameter)
-                 nrounds=64,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+                 nrounds=32,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
                  early_stopping_rounds=2,
                  nthreads=5,     # parallel threads
-                 gamma=0.2,      # Minimum loss reduc req'd to again partition a leaf node. higher number ~ more conservative (xgboost parameter)
-                 lambda=1.2,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
-                 alpha=0.2,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+                 gamma=0.1,      # Minimum loss reduc req'd to again partition a leaf node. higher number ~ more conservative (xgboost parameter)
+                 lambda=1.1,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
+                 alpha=0.1,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
                  verbose=0,
                  train_perc=0.8,
                  combine_function='median',
@@ -119,362 +296,43 @@ mod_m$train(data_frame=dat_m,
             params=params
             )
 
-save(mod_m, file='../models/males_tcga_array_step4_5.rda')
+mod_m$predict(data_frame = dat_m, sample_id = 'sample', label_name = 'cluster_group')
 
-```
+table(mod_m$test_label, mod_m$results()$BestCall)  ## OK!
 
-
-
-
-In the JIVE manuscript, there are three array expression data sets used for validation:
- GSE13041, GSE16011, and REMBRANDT
-
-See: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE55918
-https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE13041
-https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE16011
-https://link.springer.com/article/10.1007/s13402-014-0190-8#Sec20
-
-```{r}
-# load series and platform data from GEO
-gset13041 <- getGEO("GSE13041", GSEMatrix =TRUE, AnnotGPL=TRUE)
-gset16011 <- getGEO("GSE16011", GSEMatrix =TRUE, AnnotGPL=TRUE)
-gsetPheno <- read_delim('../data/validation_metadata/GBM_meta_analysis.txt')
-
-save(gset13041, gset16011, file = '../data/jive_validation_array_data.rda')
-
-```
-
-
-```{r}
-
-load('../data/jive_validation_array_data.rda')
-
-# make proper column names to match toptable 
-fvarLabels(gset13041[[1]]) <- make.names(fvarLabels(gset13041[[1]]))
-fvarLabels(gset13041[[2]]) <- make.names(fvarLabels(gset13041[[2]]))
-fvarLabels(gset13041[[3]]) <- make.names(fvarLabels(gset13041[[3]]))
-
-ex1 <- exprs(gset13041[[1]])
-ex2 <- exprs(gset13041[[2]])
-ex3 <- exprs(gset13041[[3]])
-
-ph1 <- phenoData(gset13041[[1]])
-ph2 <- phenoData(gset13041[[2]])
-ph3 <- phenoData(gset13041[[3]])
-
-phenotype_data1 <- pData(ph1)
-phenotype_data2 <- pData(ph2)
-phenotype_data3 <- pData(ph3)
-
-sym1 <- fData(gset13041[[1]])$Gene.symbol
-sym2 <- fData(gset13041[[2]])$Gene.symbol
-sym3 <- fData(gset13041[[3]])$Gene.symbol
-
-df1 <- as.data.frame(t(ex1))
-colnames(df1) <- sym1
-df1[['sample']] <- rownames(df1)
-
-df2 <- as.data.frame(t(ex2))
-colnames(df2) <- sym2
-
-df3 <- as.data.frame(t(ex3))
-colnames(df3) <- sym3
-
-
-pdf1 <- phenotype_data1[, c('geo_accession', 'characteristics_ch1.1', 'characteristics_ch1.2',
-                            'characteristics_ch1.3', 'characteristics_ch1.4','characteristics_ch1.5', 'characteristics_ch1.6')]
-
-pdf2 <- phenotype_data2[, c('geo_accession', 'characteristics_ch1.1', 'characteristics_ch1.2',
-                            'characteristics_ch1.3', 'characteristics_ch1.4','characteristics_ch1.5', 'characteristics_ch1.6')]
-
-pdf3 <- phenotype_data3[, c('geo_accession', 'characteristics_ch1.1', 'characteristics_ch1.2',
-                            'characteristics_ch1.3', 'characteristics_ch1.4','characteristics_ch1.5', 'characteristics_ch1.6')]
-
-
-table(pdf3[pdf3$characteristics_ch1.6 == 'gender: F', 'characteristics_ch1.4'])
-
-```
-
-Then we need to convert the probeIDs to gene symbols
-
-
-```{r}
-library(robencla)
-
-# load up the model
-load('../models/females_tcga_array_step4_5.rda')
-
-# load up the gene pairs used
-load('../results/females_genepairs.rda')
-
-# check what genes might be missing
-unlist(genepairs) [! unlist(genepairs) %in% colnames(df1) ]
-
-# for females
-# cluster23 cluster213 
-#   "PTCD1"     "CCT3" 
-
-# for males
-#cluster113  cluster28 cluster210  cluster46 
-#     "CIT"    "TMED7"   "CHMP4A"    "PFDN6" 
-
-CIT_alias <- c("CIT", 'STK21', 'CRIK', 'KIAA0949', 'CITK', 'MCPH17') 
-
-sapply(CIT_alias, function(a) {
-  any(str_detect(string = colnames(df1), pattern=a))
-})
-
-colnames(df1) [
-  which(str_detect(string = colnames(df1), pattern="CIT"))
-]
-
-which(str_detect(string = colnames(df1), pattern="CIT"))
- 
-colnames(df1)[22107] <- "CIT"  #  "MIR1178///CIT" 
-
-
-
-TMED7_alias <- c("TMED7") 
-
-sapply(TMED7_alias, function(a) {
-  any(str_detect(string = colnames(df1), pattern=a))
-})
-
-colnames(df1) [
-  which(str_detect(string = colnames(df1), pattern="TMED7"))
-]
-
-which(str_detect(string = colnames(df1), pattern="TMED7"))
-
-colnames(df1)[18818] <- "TMED7"  # "TMED7-TICAM2///TMED7"
-
-
-
-
-TMED7_alias <- c("PFDN6") 
-
-sapply(TMED7_alias, function(a) {
-  any(str_detect(string = colnames(df1), pattern=a))
-})
-
-colnames(df1) [
-  which(str_detect(string = colnames(df1), pattern="PFDN6"))
-]
-
-which(str_detect(string = colnames(df1), pattern="PFDN6"))
-
-colnames(df1)[31300] <- "PFDN6"  # "MIR6834///PFDN6" 
-
-
-
-CHMP4A_alias <- c("CHMP4A") 
-
-sapply(CHMP4A_alias, function(a) {
-  any(str_detect(string = colnames(df1), pattern=a))
-})
-
-colnames(df1) [
-  which(str_detect(string = colnames(df1), pattern="CHMP4A"))
-]
-
-which(str_detect(string = colnames(df1), pattern="CHMP4A"))
-
-colnames(df1)[27857] <- "CHMP4A" # "CHMP4A///TM9SF1"
-
-
-# for females
-# cluster23 cluster213 
-#   "PTCD1"     "CCT3" 
-
-PTCD1_alias <- c("PTCD1") 
-
-sapply(PTCD1_alias, function(a) {
-  any(str_detect(string = colnames(df1), pattern=a))
-})
-
-colnames(df1) [
-  which(str_detect(string = colnames(df1), pattern="PTCD1"))
-]
-
-which(str_detect(string = colnames(df1), pattern="PTCD1"))
-
-colnames(df1)[28241] <- "PTCD1" # ""ATP5J2-PTCD1///PTCD1"
-
-
-
-CCT3_alias <- c("CCT3") 
-
-sapply(CCT3_alias, function(a) {
-  any(str_detect(string = colnames(df1), pattern=a))
-})
-
-colnames(df1) [
-  which(str_detect(string = colnames(df1), pattern="CCT3"))
-]
-
-which(str_detect(string = colnames(df1), pattern="CCT3"))
-
-colnames(df1)[10359] <- "CCT3" # "LOC101927137///CCT3"
-
-
-
-
-### build the data set with the gene pairs
-
-expr_f <- df1[, unique(unlist(genepairs))]
-expr_f[["sample"]] <- rownames(expr_f)
-
-
-### split into male and females
-
-f_idx <- which(pdf1$characteristics_ch1.6 == 'gender: F')
-f_ids <- pdf1$geo_accession[pdf1$characteristics_ch1.6 == 'gender: F']
-expr_f <- expr_f[f_ids,]
-
-# save data
-save(expr_f, file='../data/df1_f.rda')
-
-
-
-
-load('../data/df1_f.rda')
-
-###
-
-mod_f$predict(data_frame = expr_f, sample_id = 'sample')
-
-mod_f$pred_table
-
-mod_f$results()$BestCall
 
 ## check results
 
-days <- as.numeric(
-  gsub(pattern = 'tts\\(days\\): ', 
-       replacement = '', 
-       pdf1$characteristics_ch1.1)
-)
-   
+mod_m$predict(data_frame = expr_m, sample_id = 'sample')
 
-boxplot(days[f_idx] ~ mod_f$results()$BestCall, 
+table(mod_m$results()$BestCall)  ## OK!
+
+
+# get them reordered
+
+### selected females in order of results
+rownames(pheno3) <- pheno3$id
+pheno3_reorg <- pheno3[mod_m$results()$SampleIDs,]
+
+resdf <- cbind(pheno3_reorg, mod_m$results())
+
+boxplot(resdf$days ~ resdf$BestCall, 
         xlab='Model Prediction', ylab='Survival (days)')
 
-
-```
-
-
-```{r}
-library(robencla)
-
-# load up the model
-load('../models/females_tcga_array_step4_5.rda')
-
-# load up the gene pairs used
-load('../results/females_genepairs.rda')
-
-# check what genes might be missing
-unlist(genepairs) [! unlist(genepairs) %in% colnames(df3) ]
-
-# for females
-# cluster23 cluster213 cluster415 
-#   "PTCD1"     "CCT3"    "CRIM1" 
-
-
-PTCD1_alias <- c("PTCD1") 
-
-sapply(PTCD1_alias, function(a) {
-  any(str_detect(string = colnames(df3), pattern=a))
-})
-
-colnames(df3) [
-  which(str_detect(string = colnames(df3), pattern="PTCD1"))
-]
-
-which(str_detect(string = colnames(df3), pattern="PTCD1"))
-
-colnames(df3)[18320] <- "PTCD1" # ""ATP5J2-PTCD1///PTCD1"
-
-
-
-CCT3_alias <- c("CCT3") 
-
-sapply(CCT3_alias, function(a) {
-  any(str_detect(string = colnames(df3), pattern=a))
-})
-
-colnames(df3) [
-  which(str_detect(string = colnames(df3), pattern="CCT3"))
-]
-
-which(str_detect(string = colnames(df3), pattern="CCT3"))
-
-colnames(df3)[438] <- "CCT3" # "LOC101927137///CCT3"
-
-
-
-
-CRIM1_alias <- c("CRIM1") 
-
-sapply(CRIM1_alias, function(a) {
-  any(str_detect(string = colnames(df3), pattern=a))
-})
-
-colnames(df3) [
-  which(str_detect(string = colnames(df3), pattern="CRIM1"))
-]
-
-which(str_detect(string = colnames(df3), pattern="CRIM1"))
-
-qplot(df3[,2079], df3[,2080])
-
-colnames(df3)[2080] <- "CRIM1" # "LOC101929500///CRIM1"
-
-
-
-
-### build the data set with the gene pairs
-
-expr_f <- df3[, unique(unlist(genepairs))]
-expr_f[["sample"]] <- rownames(expr_f)
-
-
-### split into male and females
-
-f_idx <- which(pdf3$characteristics_ch1.6 == 'gender: F')
-
-f_ids <- pdf3$geo_accession[pdf3$characteristics_ch1.6 == 'gender: F']
-
-expr_f <- expr_f[f_ids,]
-
-
-# save data
-save(expr_f, file='../data/df3_f.rda')
-
-
-
-load('../data/df3_f.rda')
-
-###
-
-mod_f$predict(data_frame = expr_f, sample_id = 'sample')
-
-mod_f$pred_table
-
-mod_f$results()$BestCall
-
-## check results
-
-days <- as.numeric(
-  gsub(pattern = 'tts\\(days\\): ', 
-       replacement = '', 
-       pdf3$characteristics_ch1.1)
-)
    
+# extra check
 
-boxplot(days[f_idx] ~ mod_f$results()$BestCall, 
+c5_call <- ifelse(resdf$BestCall == 'cluster5', yes=1, no=0) #ifelse(mod_f$pred_table$cluster3 > 0.8, yes=1, no=0)
+
+boxplot(resdf$days ~ c5_call, 
         xlab='Model Prediction', ylab='Survival (days)')
 
+library(survival)
+library(survminer)
 
+modfit <- survfit(Surv(days,status)~BestCalls,data=resdf)
+
+ggsurvplot(modfit, pval = T)
 
 ```
 

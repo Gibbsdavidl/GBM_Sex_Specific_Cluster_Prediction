@@ -15,18 +15,18 @@ library(readr)
 
 ```{r}
 
-fc1 <- read_csv('results/feature_pairs_female_cluster1_thresh04.csv.gz')
-fc2 <- read_csv('results/feature_pairs_female_cluster2.csv.gz')
-fc3 <- read_csv('results/feature_pairs_female_cluster3.csv.gz')
-fc4 <- read_csv('results/feature_pairs_female_cluster4_thresh66.csv.gz')
-fc5 <- read_csv('results/feature_pairs_female_cluster5_thresh04.csv.gz')
+fc1 <- read_csv('results/feature_pairs_females_cluster1.csv') # was thresh04
+fc2 <- read_csv('results/feature_pairs_females_cluster2.csv')
+fc3 <- read_csv('results/feature_pairs_females_cluster3.csv')
+fc4 <- read_csv('results/feature_pairs_females_cluster4.csv') # was thresh66
+fc5 <- read_csv('results/feature_pairs_females_cluster5.csv') # was thresh04
 
 
-mc1 <- read_csv('results/feature_pairs_males_cluster1.csv.gz')
-mc2 <- read_csv('results/feature_pairs_males_cluster2_thresh04.csv.gz')
-mc3 <- read_csv('results/feature_pairs_males_cluster3.csv.gz')
-mc4 <- read_csv('results/feature_pairs_males_cluster4.csv.gz')
-mc5 <- read_csv('results/feature_pairs_males_cluster5.csv.gz')
+mc1 <- read_csv('results/feature_pairs_males_cluster1.csv')
+mc2 <- read_csv('results/feature_pairs_males_cluster2.csv') # was thresh04
+mc3 <- read_csv('results/feature_pairs_males_cluster3.csv')
+mc4 <- read_csv('results/feature_pairs_males_cluster4.csv')
+mc5 <- read_csv('results/feature_pairs_males_cluster5.csv')
 
 ```
 
