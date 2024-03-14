@@ -256,26 +256,14 @@ save(mod_m, file='../models/males_tcga_array_step4.rda')
 ```
 
 ```{r}
-dat.f <- read_csv('../data/jive_training_array_data_F_v2.csv')
+dat_f <- read_csv('../data/jive_training_array_data_F_v2.csv')
 
 load('../results/females_genepairs.rda')
 
 # removing signature genes that are not available in our data sets
-female.jive.gene.list <- readRDS("../data/Female_jive_cluster_genes.rds") %>% dplyr::filter(value %in% colnames(dat.f))
+female.jive.gene.list <- readRDS("../data/Female_jive_cluster_genes.rds") %>% dplyr::filter(value %in% colnames(dat_f))
 
 female.jive.gene.list <-  female.jive.gene.list[-c(18,289),]  # "RP11-35N6_1"
-
-```
-
-```{r}
-table(dat.f$ClusterLabel)
-```
-
-```{r}
-length(genepairs)
-```
-
-```{r}
 
 sigs_f <- list("C1"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster1'],
                "C2"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster2'],
@@ -284,11 +272,52 @@ sigs_f <- list("C1"=female.jive.gene.list$value[female.jive.gene.list$cluster.gr
                "C5"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster5']
 )
 
+```
+
+```{r}
+table(dat_f$ClusterLabel)
+```
+
+```{r}
+length(genepairs)
+```
+
+```{r}
+
+clean_genepairs_list <- function(genepairs, dat) {
+  
+  genepairs_clean <- list()
+  i <- 1
+  for (pi in names(genepairs)) {
+    genes <- genepairs[[pi]]
+    missing_genes <- unique( genes [! genes %in% colnames(dat_f)] )
+    newpairlist <- c()
+    for (j in seq.int(from=1,to=length(genes), by=2)) {
+      if ( (genes[i] %in% missing_genes) | (genes[i+1] %in% missing_genes) ) {
+        # then don't add them!
+        print(paste0("removing from pair list:  ", genes[i], ' ', genes[i+1]))
+      } else {
+        newpairlist <- c(newpairlist, genes[i], genes[i+1])
+      }
+    }
+    genepairs_clean[[pi]] <- newpairlist
+  }
+  return(genepairs_clean)
+}
+
+
+genepairs_cl <- clean_genepairs_list(genepairs, dat_f)
+
+
+```
+
+```{r}
+
 # in case we want to test it #
 idx <- sample(1:139, size=100, replace = F)
 jdx <- setdiff(1:139, idx)
-train <- dat.f[idx,1:14455]
-test <- dat.f[jdx,1:14455]
+train <- dat_f[idx,1:14455]
+test <- dat_f[jdx,1:14455]
 
 # our classifier object named Roberta
 buffy <- Robencla$new("buffy")

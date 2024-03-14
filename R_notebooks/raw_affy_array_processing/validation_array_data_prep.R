@@ -16,55 +16,41 @@ if(!require("org.Hs.eg.db", quietly = TRUE))
 
 #save(gset13041, gset16011, file = '../data/jive_validation_array_data.rda')
 
-load('data/jive_validation_array_data.rda')
+#From the JIVE paper
+#GSE13041 consists of 174 GBM
+#patients (105 males and 69 females) profiled on Affymetrix human genome U133A and U133
+#plus 2.0 (samples profiled on Affymetrix human genome U95Av2 were excluded because of the
+#          small number of overlapping genes).
 
-# The list item [[2]] is not used in the JIVE paper 
+load('data/Array Data/jive_validation_array_data.rda')
+
+meta13041_1 <- read_delim('data/Array Data/validation_array_data/GPL96-57554.txt',delim='\t',comment='#')
+
+##
+# The list item [[2]] is not used in the JIVE paper ##
+##
 
 # make proper column names to match toptable 
 fvarLabels(gset13041[[1]]) <- make.names(fvarLabels(gset13041[[1]]))
-fvarLabels(gset13041[[2]]) <- make.names(fvarLabels(gset13041[[2]])) 
+#fvarLabels(gset13041[[2]]) <- make.names(fvarLabels(gset13041[[2]])) 
 fvarLabels(gset13041[[3]]) <- make.names(fvarLabels(gset13041[[3]]))
 
-#ex1 <- exprs(gset13041[[1]]) # expression will come from scan
+ex1 <- exprs(gset13041[[1]]) # [1] 54675    27
 #ex2 <- exprs(gset13041[[2]])
-#ex3 <- exprs(gset13041[[3]])
+ex3 <- exprs(gset13041[[3]]) # [1] 22283   191
 
-ph1 <- phenoData(gset13041[[1]])
-ph2 <- phenoData(gset13041[[2]])
-ph3 <- phenoData(gset13041[[3]])
-
-phenotype_data1 <- pData(ph1)
-phenotype_data2 <- pData(ph2)
-phenotype_data3 <- pData(ph3)
-
-sym1 <- fData(gset13041[[1]])$Gene.symbol
-sym2 <- fData(gset13041[[2]])$Gene.symbol
-sym3 <- fData(gset13041[[3]])$Gene.symbol
-
-id1 <- fData(gset13041[[1]])$ID
-id2 <- fData(gset13041[[2]])$ID
-id3 <- fData(gset13041[[3]])$ID
-
-probeMap1 <- data.frame(ID=id1, Symbol=sym1)
-probeMap2 <- data.frame(ID=id2, Symbol=sym2)
-probeMap3 <- data.frame(ID=id3, Symbol=sym3)
-
-#df1 <- as.data.frame(t(ex1))
-#colnames(df1) <- sym1
-#df1[['sample']] <- rownames(df1)
-#df2 <- as.data.frame(t(ex2))
-#colnames(df2) <- sym2
-#df3 <- as.data.frame(t(ex3))
-#colnames(df3) <- sym3
+phenotype_data1 <- pData(  phenoData(gset13041[[1]])  )
+#phenotype_data2 <- pData(ph2)
+phenotype_data3 <- pData(  phenoData(gset13041[[3]])  )
 
 
 pdf1 <- phenotype_data1[, c('geo_accession', 'characteristics_ch1.1', 'characteristics_ch1.2',
                             'characteristics_ch1.3', 'characteristics_ch1.4',
                             'characteristics_ch1.5', 'characteristics_ch1.6')]
 
-pdf2 <- phenotype_data2[, c('geo_accession', 'characteristics_ch1.1', 'characteristics_ch1.2',
-                            'characteristics_ch1.3', 'characteristics_ch1.4',
-                            'characteristics_ch1.5', 'characteristics_ch1.6')]
+#pdf2 <- phenotype_data2[, c('geo_accession', 'characteristics_ch1.1', 'characteristics_ch1.2',
+#                            'characteristics_ch1.3', 'characteristics_ch1.4',
+#                            'characteristics_ch1.5', 'characteristics_ch1.6')]
 
 pdf3 <- phenotype_data3[, c('geo_accession', 'characteristics_ch1.1', 'characteristics_ch1.2',
                             'characteristics_ch1.3', 'characteristics_ch1.4',
@@ -80,11 +66,11 @@ days1 <- as.numeric(
        pdf1$characteristics_ch1.1)
 )
 
-days2 <- as.numeric(
-  gsub(pattern = 'tts\\(days\\): ', 
-       replacement = '', 
-       pdf2$characteristics_ch1.1)
-)
+#days2 <- as.numeric(
+#  gsub(pattern = 'tts\\(days\\): ', 
+#       replacement = '', 
+#       pdf2$characteristics_ch1.1)
+#)
 
 
 days3 <- as.numeric(
@@ -95,24 +81,75 @@ days3 <- as.numeric(
 
 #status: censoring status 1=censored, 2=dead
 vitalstatus1 <- ifelse(pdf1$characteristics_ch1.2 == 'vital status: ALIVE', yes=1, no=2)
-vitalstatus2 <- ifelse(pdf2$characteristics_ch1.2 == 'vital status: ALIVE', yes=1, no=2)
+#vitalstatus2 <- ifelse(pdf2$characteristics_ch1.2 == 'vital status: ALIVE', yes=1, no=2)
 vitalstatus3 <- ifelse(pdf3$characteristics_ch1.2 == 'vital status: ALIVE', yes=1, no=2)
 
 pheno1 <- data.frame('id'=pdf1$geo_accession, 'days'=days1, 'sex'=pdf1$characteristics_ch1.6, status=vitalstatus1)
-pheno2 <- data.frame('id'=pdf2$geo_accession, 'days'=days2, 'sex'=pdf2$characteristics_ch1.6, status=vitalstatus2)
+#pheno2 <- data.frame('id'=pdf2$geo_accession, 'days'=days2, 'sex'=pdf2$characteristics_ch1.6, status=vitalstatus2)
 pheno3 <- data.frame('id'=pdf3$geo_accession, 'days'=days3, 'sex'=pdf3$characteristics_ch1.6, status=vitalstatus3)
 
 
-save(pheno1,pheno2,pheno3, file='data/validation_array_data/pheno13041.rda')
-save(probeMap1,probeMap2,probeMap3, file='data/validation_array_data/symbols13041.rda')
+save(pheno1,pheno3, file='data/Array Data/validation_array_data/pheno13041.rda')
+save(probeMap1,probeMap3, file='data/Array Data/validation_array_data/symbols13041.rda')
 
 #Then we need to convert the esets to data.frames
 
-load('../data/validation_array_data/pheno13041.rda')
-load('../data/validation_array_data/symbols13041.rda')
-load('../data/validation_array_data/esets/norm13041_esetList.rda')
-load('../data/validation_array_data/esets/norm13041_MDA.rda')
-load('../data/validation_array_data/esets/norm13041_TB.rda')
+#load('data/Array Data/validation_array_data/pheno13041.rda')
+#load('data/Array Data/validation_array_data/symbols13041.rda')
+#load('data/Array Data/validation_array_data/esets/norm13041_esetList.rda')
+#load('data/Array Data/validation_array_data/esets/norm13041_MDA.rda')
+#load('data/Array Data/validation_array_data/esets/norm13041_TB.rda')
+
+dim(ex3)
+#[1] 22283   191
+
+# map IDs to symbols
+gidx <- match(rownames(ex3), meta13041_1$ID)
+all(rownames(ex3) == meta13041_1$ID[gidx])
+#[1] TRUE
+
+ex3_entrez <-  meta13041_1$ENTREZ_GENE_ID[gidx]
+
+sum(duplicated(meta13041_1$ENTREZ_GENE_ID))
+#[1] 9038
+
+ex3_entrez_take1 <- as.character(
+  sapply(ex3_entrez, function(x) str_split(x, pattern=' /// ')[[1]][1] )
+)
+
+ex3_symbols <- mapIds(org.Hs.eg.db,
+                  keys=as.character(ex3_entrez_take1),
+                  column="SYMBOL",
+                  keytype="ENTREZID",
+                  multiVals="first")
+
+
+##
+# some of the symbols are NAs
+sum(duplicated(ex3_symbols))
+#[1] 
+sum(is.na(ex3_symbols))
+#[1] 75
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # pheno3
 esetList[[1]]  # 105 samples 22283 features
@@ -121,7 +158,7 @@ norm13041_TB   # 31 samples  22283 features
 # 105+31+55 # 191
 
 # pheno2
-esetList[[2]]  # 49 samples  12625 features
+#esetList[[2]]  # 49 samples  12625 features
 
 #pheno1
 esetList[[3]]  # 27 samples  54675 features
@@ -168,10 +205,12 @@ save(mat3, file='../data/validation_array_data/GSE13041_mat3.rda')
 
 library(robencla)
 
-load('../data/validation_array_data/GSE13041_mat3.rda')
+load('../data/Array Data/validation_array_data/GSE13041_mat1.rda')
+#load('../data/Array Data/validation_array_data/GSE13041_mat2.rda')
+load('../data/Array Data/validation_array_data/GSE13041_mat3.rda')
 
 # load up the model
-load('../models/females_tcga_array_step4_5.rda')
+# load('../models/females_tcga_array_step4_5.rda')
 
 # load up the gene pairs used
 load('../results/females_genepairs.rda')
@@ -284,3 +323,5 @@ expr_f3 <- expr_f3[f3_ids,]
 save(expr_f1,expr_f3, file='../data/expr_f_13041.rda')
 
 
+
+#### 
