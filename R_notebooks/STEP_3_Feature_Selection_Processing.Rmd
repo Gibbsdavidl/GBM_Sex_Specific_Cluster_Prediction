@@ -17,8 +17,8 @@ array_m <- read_csv('../data/jive_training_array_data_M.csv')
 
 resdf_m <- read_csv('../results/feature_selection_table_male.csv')
 
-resdf_m <- resdf_m[!resdf_m$gene_i %in% 14454:14456, ]
-resdf_m <- resdf_m[!resdf_m$gene_j %in% 14454:14456, ]
+(colnames(array_m))[12645:12647]
+#[1] "Barcode"      "ClusterLabel" "Sex"  
 
 table(resdf_m$cluster)
 
@@ -203,21 +203,17 @@ save(genepairs, file='../results/males_genepairs.rda')
 array_f  <- read_csv('../data/jive_training_array_data_F.csv')
 
 resdf_f <- read_csv('../results/feature_selection_table_female.csv')
-resdf_f <- resdf_f[!resdf_f$gene_i %in% 14454:14456, ]
-resdf_f <- resdf_f[!resdf_f$gene_j %in% 14454:14456, ]
-
-# remove RP11-35N6.1 # a pseudogene that ranks high
-resdf_f <- resdf_f[ (resdf_f$gene_i != 12422) & (resdf_f$gene_j != 12422), ]
 
 # drop the first column of row numbers
 array_f <- array_f[,-1]
 
 table(resdf_f$cluster)
 
+tail(colnames(array_f))
+
 ```
 
 ```{r}
-
 
 # don't count the annotation columns at the end
 array_ncol <- ncol(array_f)-3
@@ -304,102 +300,9 @@ genepairs <- list(
 
 ```
 
-```{r}
-
-
-# getting the gene pairs mapped correctly to symbols.
-
-library(org.Hs.eg.db)
-
-$cluster5
-[1] "STEEP1"
-
-colnames(array_f)[ which(str_detect(colnames(array_f), 'PHLDA1')) ]
-
-# fix the symbols with multi-maps
-genepairs$cluster1[12] <- 'GRINL1A' # "GRINL1A /// Gcom1 /// LOC339970" ## Symbol POLR2M
-colnames(array_f)[c(8067, 8069)] <- c('POLR2M', 'GRINL1A_2')
-
-genepairs$cluster1[28] <- 'THSD1'  # "THSD1 /// THSD1P"  ## symbol THSD1
-colnames(array_f)[c(12195)] <- c('THSD1')
-
-genepairs$cluster2[24] <- 'CDC2L1'  # "CDC2L1 /// LOC728642"  # symbol CDK11B 
-genepairs$cluster2[38] <- 'FAM86B1' # "FAM86C /// FAM86B1 /// LOC348926 /// LOC645332 /// ... FAM86D...
-colnames(array_f)[c(5492, 7502, 7752)] <- c('CDK11B', 'CDC2L2', 'CDC2L2_2')
-
-genepairs$cluster3[36] <- 'JAKMIP2'  # "JAKMIP2 /// MYT1L"
-colnames(array_f)[c(4114, 4115)] <- c('JAKMIP2', 'JAKMIP2_2')
-
-genepairs$cluster5[8]  <- 'DND1' #"DND1 /// LOC644157 /// LOC644256 /// LOC649072"
-genepairs$cluster5[10] <- 'CXorf56' #"CXorf56 /// LOC728024 /// LOC731173"
-genepairs$cluster5[11] <- 'PHLDA1' #"PHLDA1 /// LOC652993"
-genepairs$cluster5[20] <- 'DND1' #"DND1 /// LOC644157 /// LOC644256 /// LOC649072"
-genepairs$cluster5[32] <- 'PHLDA1' #"PHLDA1 /// LOC652993"
-colnames(array_f)[c(6630, 14227, 14390)] <- c('CLDND1', 'DND1', 'DND1_2')
-colnames(array_f)[c(12486)] <- c('STEEP1')
-colnames(array_f)[c(10876, 10877)] <- c('PHLDA1', 'PHLDA1_2')
-
-
-# for each cluster set, map to correct symbols
-symbolpairs <- lapply(genepairs,
-                      function(x) {
-                        select(org.Hs.eg.db,
-                               keys =  x,
-                               columns=c("ENTREZID","SYMBOL"),
-                               keytype="ALIAS")
-                        
-                      })
-#<- 
-symbolpairs[["cluster1"]] <- symbolpairs[["cluster1"]][!symbolpairs$cluster1$ENTREZID %in% c(145781),] 
-
-symbolpairs[["cluster2"]] <- symbolpairs[["cluster2"]][!symbolpairs$cluster2$ENTREZID %in% c(56246,619477),] 
-## 214101_s_at maps to BG153399, LOC728896, entrez id = 728896   NPEPPS
-symbolpairs[["cluster2"]][symbolpairs$cluster2$ALIAS == 'LOC728896', 'SYMBOL'] <- 'NPEPPS'
-
-symbolpairs[["cluster3"]] <- symbolpairs[["cluster3"]][!symbolpairs$cluster3$ENTREZID %in% c(54453,5926),] 
-
-symbolpairs[["cluster4"]] <- symbolpairs[["cluster4"]][!symbolpairs$cluster4$ENTREZID %in% c(4571,51026, 127845  ),] 
-
-symbolpairs[["cluster5"]] <- symbolpairs[["cluster5"]][!symbolpairs$cluster5$ENTREZID %in% c(176),] 
-#LOC388969, LOC728896      
-symbolpairs[["cluster5"]][symbolpairs$cluster5$ALIAS == 'LOC728896', 'SYMBOL'] <- 'NPEPPS'
-symbolpairs[["cluster5"]][symbolpairs$cluster5$ALIAS == 'LOC388969', 'SYMBOL'] <- 'C2orf68' 
-
-
-genepairs <- lapply(symbolpairs, function(x) x$SYMBOL)
-
-```
-
 
 ```{r}
 
-### Fix the gene names in the array ###
-
-
-### Fix the gene names on the array now###
-
-# first get the alias to symbol table 
-fullmap <- rbind(symbolpairs$cluster1,symbolpairs$cluster2,
-                 symbolpairs$cluster3, symbolpairs$cluster4,
-                 symbolpairs$cluster5)
-fullmap <- unique(fullmap)
-
-fullmap
-
-# fix the multi-mapping colnames
-#which(str_detect(colnames(array_m), 'PLGLB2')) # 4099
-#colnames(array_m)[4099] <- "PLGLB2"
-
-# for each alias, map in the correct symbol
-for (i in 1:nrow(fullmap)){
-  ai <- fullmap$ALIAS[i]
-  si <- fullmap$SYMBOL[i]
-  idx <- which(colnames(array_f) == ai) 
-  print(paste0(ai, "  replaceing ", as.character(length(idx)), '  ', si))
-  colnames(array_f)[idx] <- si
-}
-
-write_csv(array_f, file='../data/jive_training_array_data_F_v2.csv')
 save(genepairs, file='../results/females_genepairs.rda')
 
 ```

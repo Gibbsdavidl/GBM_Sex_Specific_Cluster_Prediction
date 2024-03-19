@@ -9,12 +9,11 @@ if (!require("GEOquery", quietly = TRUE))
 if(!require("org.Hs.eg.db", quietly = TRUE))
   BiocManager::install("org.Hs.eg.db")
 
-# load series and platform data from GEO
-#gset13041 <- getGEO("GSE13041", GSEMatrix =TRUE, AnnotGPL=TRUE)
-#gset16011 <- getGEO("GSE16011", GSEMatrix =TRUE, AnnotGPL=TRUE)
-#gsetPheno <- read_delim('../data/validation_metadata/GBM_meta_analysis.txt')
+if(!require("hgu133a.db", quietly = TRUE))
+  BiocManager::install("hgu133a.db")
 
-#save(gset13041, gset16011, file = '../data/jive_validation_array_data.rda')
+
+library(readr)
 
 #From the JIVE paper
 #GSE13041 consists of 174 GBM
@@ -24,11 +23,12 @@ if(!require("org.Hs.eg.db", quietly = TRUE))
 
 load('data/Array Data/jive_validation_array_data.rda')
 
-meta13041_1 <- read_delim('data/Array Data/validation_array_data/GPL96-57554.txt',delim='\t',comment='#')
+meta13041_3 <- read_delim('data/Array Data/validation_array_resources/GPL96-57554.txt',delim='\t',comment='#')
 
-##
-# The list item [[2]] is not used in the JIVE paper ##
-##
+##                                                 ##   
+# The list item [[2]] is not used in the JIVE paper #
+##                                                 ##
+
 
 # make proper column names to match toptable 
 fvarLabels(gset13041[[1]]) <- make.names(fvarLabels(gset13041[[1]]))
@@ -89,12 +89,12 @@ pheno1 <- data.frame('id'=pdf1$geo_accession, 'days'=days1, 'sex'=pdf1$character
 pheno3 <- data.frame('id'=pdf3$geo_accession, 'days'=days3, 'sex'=pdf3$characteristics_ch1.6, status=vitalstatus3)
 
 
-save(pheno1,pheno3, file='data/Array Data/validation_array_data/pheno13041.rda')
-save(probeMap1,probeMap3, file='data/Array Data/validation_array_data/symbols13041.rda')
+#save(pheno1,pheno3, file='data/Array Data/validation_array_data/pheno13041.rda')
+#save(probeMap1,probeMap3, file='data/Array Data/validation_array_data/symbols13041.rda')
 
 #Then we need to convert the esets to data.frames
 
-#load('data/Array Data/validation_array_data/pheno13041.rda')
+#load('data/Array Data/validation_array_resources/')
 #load('data/Array Data/validation_array_data/symbols13041.rda')
 #load('data/Array Data/validation_array_data/esets/norm13041_esetList.rda')
 #load('data/Array Data/validation_array_data/esets/norm13041_MDA.rda')
@@ -103,99 +103,58 @@ save(probeMap1,probeMap3, file='data/Array Data/validation_array_data/symbols130
 dim(ex3)
 #[1] 22283   191
 
-# map IDs to symbols
-gidx <- match(rownames(ex3), meta13041_1$ID)
-all(rownames(ex3) == meta13041_1$ID[gidx])
-#[1] TRUE
-
-ex3_entrez <-  meta13041_1$ENTREZ_GENE_ID[gidx]
-
-sum(duplicated(meta13041_1$ENTREZ_GENE_ID))
-#[1] 9038
-
-ex3_entrez_take1 <- as.character(
-  sapply(ex3_entrez, function(x) str_split(x, pattern=' /// ')[[1]][1] )
-)
-
-ex3_symbols <- mapIds(org.Hs.eg.db,
-                  keys=as.character(ex3_entrez_take1),
-                  column="SYMBOL",
-                  keytype="ENTREZID",
-                  multiVals="first")
+ex3[1:5,1:5]
 
 
-##
-# many genes have more than one probe mapped to it
-sum(duplicated(ex3_symbols))
-#[1] 9038
-sum(is.na(ex3_symbols))
-#[1] 75
-sum(ex3_symbols == "NULL")
-#[1] 1310
+# the stat used to filter out probes
+Xvar <- apply(ex3, 1, var, na.rm=T)
 
-# start with removing the NAs
-ndx <- which(is.na(ex3_symbols))
-for (ni in ndx) {
-  ex3_symbols[ni] <- paste0('NA_',ni)
-}
+# https://rdrr.io/github/Bioconductor/genefilter/man/findLargest.html
+# https://support.bioconductor.org/p/23397/
+fidx <- genefilter::findLargest(gN = rownames(ex3), testStat = Xvar, data = "hgu133a")
 
-# then removing the NULLs
-ndx <- which(ex3_symbols == "NULL")
-for (ni in ndx) {
-  ex3_symbols[ni] <- paste0('NULL_',ni)
-}
+
+# filter the probes
+Xfilt <- ex3[fidx,]
+
+# check the ID mapping
+x <- hgu133aENTREZID
+geneids <- sapply(rownames(Xfilt), function(a) x[[a]])
+sum(duplicated(geneids))
+# [1] 0
+
+xs <- hgu133aSYMBOL
+geneids <- sapply(rownames(Xfilt), function(a) xs[[a]])
+sum(duplicated(geneids))
+# [1] 0
+
+exprmat <- as.data.frame(t(Xfilt))
+colnames(exprmat) <- geneids
+#[1] 0
+
+exprmat <- as.data.frame(t(Xfilt))
+colnames(exprmat) <- geneids
 
 
 # going to take the probe with the highest median measure,
 # after looking at ACTN2 and CSH1, where just a couple probes 
 # have expression and most don't
 
-ex3_mat <- as.data.frame(t(ex3))
-
-# get the unique list of genes that have more than one probe
-gene_dups <- unlist(unique(ex3_symbols[duplicated(ex3_symbols)]))
-
-# for each gene
-for (gi in gene_dups) {
-  # get the index for this gene
-  cidx <- which(ex3_symbols == gi)
-  # compute the variance for each probe
-  mexpr <- apply(ex3_mat[,cidx], 2, var, na.rm=T)
-  # determine which one to take
-  idx <- cidx[mexpr == max(mexpr)]
-  if (length(idx) > 1) {
-    print("MORE THAN ONE MAX!!")
-    idx <- idx[1]
-  }
-  # collection probes that are less 
-  jdx <- cidx[mexpr < max(mexpr,na.rm = T)]
-  # for each that are less than the median, mark them
-  for (ji in jdx) {
-    ex3_symbols[ji] <- paste0(ex3_symbols[ji],'_',ji) 
-  }
-  
-}
-
-
-# lay in the symbols
-colnames(ex3_mat) <- ex3_symbols
-
-
 ############ 
 # Now to add in the phenotype
 
-idx <- match(rownames(ex3_mat), pheno3$id)
-all(rownames(ex3_mat) == pheno3$id[idx])
+idx <- match(rownames(exprmat), pheno3$id)
+all(rownames(exprmat) == pheno3$id[idx])
 
-ex3_mat$SampleID <- pheno3$id[idx]
-ex3_mat$Sex <- pheno3$sex[idx]
-ex3_mat$Survival <- pheno3$days[idx]
-ex3_mat$Censored <- pheno3$status
+exprmat$SampleID <- pheno3$id[idx]
+exprmat$Sex      <- pheno3$sex[idx]
+exprmat$Survival <- pheno3$days[idx]
+exprmat$Censored <- pheno3$status[idx]
 
-ex3_mat_F <- ex3_mat[ex3_mat$Sex == 'gender: F',]
-ex3_mat_M <- ex3_mat[ex3_mat$Sex == 'gender: M',]
+exprmat_F <- exprmat[exprmat$Sex == 'gender: F',]
+exprmat_M <- exprmat[exprmat$Sex == 'gender: M',]
 
-write_csv(ex3_mat_F, file='data/Array Data/jive_validation_13041_ex3_F.csv')
-write_csv(ex3_mat_M, file='data/Array Data/jive_validation_13041_ex3_M.csv')
+write_csv(exprmat_F, file='data/Array Data/jive_validation_13041_ex3_F_v2.csv')
+write_csv(exprmat_M, file='data/Array Data/jive_validation_13041_ex3_M_v2.csv')
 
 

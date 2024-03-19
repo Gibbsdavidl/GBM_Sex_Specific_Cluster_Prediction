@@ -17,15 +17,19 @@ if (!require("BiocManager", quietly = TRUE))
 if(!require("survminer", quietly = TRUE))
   BiocManager::install("survminer")
   
-devtools::install_github("gibbsdavidl/robencla", force = T)
+if(!require("robencla", quietly=TRUE))
+  devtools::install_github("gibbsdavidl/robencla", force = F)
 
 ```
 
 ## JIVE Validation
 
 ```{r}
+
+
+# Take the data set, and filter out pair genes that are not present.
+
 clean_genepairs_list <- function(genepairs, dat_x) {
-  
   genepairs_clean <- list()
   i <- 1
   for (pi in names(genepairs)) {
@@ -55,32 +59,37 @@ First training the full model with all data.
 library(readr)
 library(robencla)
 
-dat_f <- read_csv('../data/jive_training_array_data_F_v2.csv')
+dat_f <- read_csv('../data/jive_training_array_data_F.csv')
+
+val_f <- read_csv('../data/Array Data/jive_validation_16011_F.csv')
 
 load("../results/females_genepairs.rda")
 
+lapply(genepairs, function(x) x[! (x %in% colnames(dat_f))] )
+lapply(genepairs, function(x) x[! (x %in% colnames(val_f))] )
+
+gidx <- which(colnames(val_f) == 'GFOD3P')
+colnames(val_f)[gidx] <- 'TP73-AS1'
+
 genepairs_cl <- clean_genepairs_list(genepairs, dat_f)
-genepairs_cl <- clean_genepairs_list(genepairs_cl, val_F)
+genepairs_cl <- clean_genepairs_list(genepairs_cl, val_f)
 
-
-lapply(genepairs_cl, function(x) sum(x %in% colnames(dat_f))/ length(x))
-
-#dat_f <- dat_f[, ! colnames(dat_f) %in% c('Sex',')]
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
-params <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
-                 eta=0.4,        # this is the learning rate. smaller values slow it down, more conservative   (xgboost parameter)
-                 nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
-                 early_stopping_rounds=2,
-                 nthreads=5,     # parallel threads
-                 gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
-                 lambda=1.2,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
-                 alpha=0.2,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
-                 verbose=0,
-                 train_perc=0.8,
-                 combine_function='median',
-                 size=11
-  )
+params <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+               eta=0.2,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
+               nrounds=12,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+               early_stopping_rounds=2,
+               nthreads=6,     # parallel threads
+               gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
+               lambda=1.2,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
+               alpha=0.2,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+               verbose=0,
+               train_perc=0.8,
+               combine_function='median',
+               size=11
+)
+
 
 mod_f <- robencla::Robencla$new('f_model')
 
@@ -97,54 +106,37 @@ mod_f$train(data_frame=dat_f,
 
 #save(mod_f, file='../models/females_tcga_array_step4_5.rda')
 
-```
-
-
-
-
-In the JIVE manuscript, there are three array expression data sets used for validation:
- GSE13041, GSE16011, and REMBRANDT
-
-See: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE55918
-https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE13041
-https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE16011
-https://link.springer.com/article/10.1007/s13402-014-0190-8#Sec20
-
-
-```{r}
-
-val_F <- read_csv('../data/Array Data/jive_validation_16011_F.csv')
-
-
 ### to run the model, we need the same column names as in the training data
-
-lapply(genepairs_cl, function(x) sum(x %in% colnames(val_F))/ length(x))
-lapply(genepairs_cl, function(x) x[ !(x %in% colnames(val_F))] ) 
+# but that's taken care of with pair cleaning ...
 
 # run the model
-mod_f$predict(data_frame = val_F, 
+mod_f$predict(data_frame = val_f, 
               sample_id = 'SampleID',
               drop_list = c('Sex'))
 
 
-mod_f$pred_table
-mod_f$results()
 table(mod_f$results()$BestCall)
 ## check results
 
 # get them reordered
-
-val_F[1:5, 17529:17532]
-
 ### selected females in order of results
-rownames(val_F) <- val_F$SampleID
-pheno3_reorg <- val_F[mod_f$results()$SampleIDs, c("SampleID","Sex","Survival","Censored")]
+rownames(val_f) <- val_f$SampleID
+pheno3_reorg <- val_f[mod_f$results()$SampleIDs, c("SampleID","Sex","Survival","Censored")]
 
 # now bind in the results to the phenotype data
 resdf <- cbind(pheno3_reorg, mod_f$results())
 resdf <- na.omit(resdf)
+resdf$Survival <- as.numeric(resdf$Survival)
 
-boxplot(as.numeric(resdf$Survival) ~ resdf$BestCall, 
+resdf$cluster1 <- unlist(resdf$cluster1)
+resdf$cluster2 <- unlist(resdf$cluster2)
+resdf$cluster3 <- unlist(resdf$cluster3)
+resdf$cluster4 <- unlist(resdf$cluster4)
+resdf$cluster5 <- unlist(resdf$cluster5)
+
+write_csv(resdf, file='gse16011_results.csv')
+
+boxplot(resdf$Survival ~ resdf$BestCall, 
         xlab='Model Prediction', ylab='Survival (days)')
 
    
@@ -152,7 +144,7 @@ boxplot(as.numeric(resdf$Survival) ~ resdf$BestCall,
 
 c3_call <- ifelse(resdf$BestCall == 'cluster3', yes=1, no=0) #ifelse(mod_f$pred_table$cluster3 > 0.8, yes=1, no=0)
 
-boxplot(as.numeric(resdf$Survival) ~ c3_call, 
+boxplot(resdf$Survival ~ c3_call, 
         xlab='Model Prediction', ylab='Survival (days)')
 
 library(survival)
@@ -161,166 +153,103 @@ library(survminer)
 modfit <- survfit(Surv(Survival,Censored)~BestCalls,data=resdf)
 
 ggsurvplot(modfit, pval = T)
+ggsave('../figures/validation_survival_curve_F_16011.pdf')
 
 ```
 
 
-males
+
+
+16011 males
 
 ```{r}
 
-load('../data/validation_array_data/pheno13041.rda')
 
-load('../data/validation_array_data/GSE13041_mat3.rda')
+library(readr)
+library(robencla)
 
-# load up the gene pairs used
-load('../results/males_genepairs.rda')
+dat_m <- read_csv('../data/jive_training_array_data_M_v2.csv')
 
+val_m <- read_csv('../data/Array Data/jive_validation_16011_M.csv')
 
-# check what genes might be missing
-unlist(genepairs) [! unlist(genepairs) %in% colnames(mat3) ]
+load("../results/males_genepairs.rda")
 
-# for males
-#cluster113  cluster28 cluster210  cluster46 
-#     "CIT"    "TMED7"   "CHMP4A"    "PFDN6" 
+# removing signature genes that are not available in our data sets
+male.jive.gene.list <- readRDS("../data/Males_jive_cluster_genes.rds") %>% 
+  dplyr::filter(value %in% colnames(dat_m)) %>%
+  dplyr::filter(value %in% colnames(val_m))
+  
+genepairs_cl <- clean_genepairs_list(genepairs, dat_m)
+genepairs_cl <- clean_genepairs_list(genepairs_cl, val_m)
 
-CIT_alias <- c("CIT", 'STK21', 'CRIK', 'KIAA0949', 'CITK', 'MCPH17') 
-
-sapply(CIT_alias, function(a) {
-  any(str_detect(string = colnames(mat3), pattern=a))
-})
-
-colnames(mat3) [
-  which(str_detect(string = colnames(mat3), pattern="CIT"))
-]
-
-which(str_detect(string = colnames(mat3), pattern="CIT"))
- 
-colnames(mat3)[12186] <- "CIT"  #  "MIR1178///CIT" 
+lapply(genepairs_cl, function(x) sum(x %in% colnames(dat_m))/ length(x))
 
 
+sigs.m <- list("C1"=male.jive.gene.list$value[male.jive.gene.list$cluster.group == 'cluster1'],
+               "C2"=male.jive.gene.list$value[male.jive.gene.list$cluster.group == 'cluster2'],
+               "C3"=male.jive.gene.list$value[male.jive.gene.list$cluster.group == 'cluster3'],
+               "C4"=male.jive.gene.list$value[male.jive.gene.list$cluster.group == 'cluster4'],
+               "C5"=male.jive.gene.list$value[male.jive.gene.list$cluster.group == 'cluster5']
+)
 
-TMED7_alias <- c("TMED7") 
-
-sapply(TMED7_alias, function(a) {
-  any(str_detect(string = colnames(mat3), pattern=a))
-})
-
-colnames(mat3) [
-  which(str_detect(string = colnames(mat3), pattern="TMED7"))
-]
-
-which(str_detect(string = colnames(mat3), pattern="TMED7"))
-
-cor(mat3[,8897], mat3[,14034])
-
-#8897, 14034
-colnames(mat3)[14034] <- "TMED7"  # "TMED7-TICAM2///TMED7"
-
-
-
-TMED7_alias <- c("PFDN6") 
-
-sapply(TMED7_alias, function(a) {
-  any(str_detect(string = colnames(mat3), pattern=a))
-})
-
-colnames(mat3) [
-  which(str_detect(string = colnames(mat3), pattern="PFDN6"))
-]
-
-which(str_detect(string = colnames(mat3), pattern="PFDN6"))
-#21379 21389
-colnames(mat3)[21389] <- "PFDN6"  # "MIR6834///PFDN6" 
-
-
-
-CHMP4A_alias <- c("CHMP4A") 
-
-sapply(CHMP4A_alias, function(a) {
-  any(str_detect(string = colnames(mat3), pattern=a))
-})
-
-colnames(mat3) [
-  which(str_detect(string = colnames(mat3), pattern="CHMP4A"))
-]
-
-which(str_detect(string = colnames(mat3), pattern="CHMP4A"))
-#17936 17937
-colnames(mat3)[17937] <- "CHMP4A" # "CHMP4A///TM9SF1"
-
-
-
-### build the data set with the gene pairs
-
-expr_m <- mat3[, unique(unlist(genepairs))]
-expr_m[["sample"]] <- rownames(expr_m)
-
-
-### split into male and females
-
-m_idx <- which(pheno3$sex == 'gender: M')
-
-m_ids <- pheno3$id[pheno3$sex == 'gender: M']
-
-expr_m <- expr_m[m_ids,]
-
-# save data
-save(expr_m, file='../data/GSE13041_mat3_m.rda.rda')
-
-
-###
-
-
-dat_m <- read_csv('../data/Males_Array_Data.csv.gz')
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
-params <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
-                 eta=0.2,        # this is the learning rate. smaller values slow it down, more conservative   (xgboost parameter)
-                 nrounds=32,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
-                 early_stopping_rounds=2,
-                 nthreads=5,     # parallel threads
-                 gamma=0.1,      # Minimum loss reduc req'd to again partition a leaf node. higher number ~ more conservative (xgboost parameter)
-                 lambda=1.1,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
-                 alpha=0.1,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
-                 verbose=0,
-                 train_perc=0.8,
-                 combine_function='median',
-                 size=11
-  )
+params <- list(max_depth=18,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+               eta=0.2,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
+               nrounds=32,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+               early_stopping_rounds=2,
+               nthreads=8,     # parallel threads
+               gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
+               lambda=1.2,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
+               alpha=0.2,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+               verbose=0,
+               train_perc=0.8,
+               combine_function='median',
+               size=11
+)
+
 
 mod_m <- robencla::Robencla$new('m_model')
 
+
 mod_m$train(data_frame=dat_m,
-            label_name='cluster_group',
-            sample_id = 'sample',
+            label_name='ClusterLabel',
+            sample_id = 'Barcode',
+            drop_list = c('Sex'),
             data_mode=c('pairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
-            signatures=NULL,
-            pair_list=genepairs,  # subset to these genes.
+            signatures=sigs.m,
+            pair_list=genepairs_cl,  # subset to these genes.
             params=params
             )
 
-mod_m$predict(data_frame = dat_m, sample_id = 'sample', label_name = 'cluster_group')
 
-table(mod_m$test_label, mod_m$results()$BestCall)  ## OK!
+### to run the model, we need the same column names as in the training data
+# but that's taken care of with pair cleaning ...
+
+lapply(genepairs_cl, function(x) sum(x %in% colnames(val_m))/ length(x))
+
+# run the model
+mod_m$predict(data_frame = val_m, 
+              sample_id = 'SampleID',
+              drop_list = c('Sex'))
 
 
+#mod_f$pred_table
+#mod_f$results()
+table(mod_m$results()$BestCall)
 ## check results
 
-mod_m$predict(data_frame = expr_m, sample_id = 'sample')
-
-table(mod_m$results()$BestCall)  ## OK!
-
-
 # get them reordered
-
 ### selected females in order of results
-rownames(pheno3) <- pheno3$id
-pheno3_reorg <- pheno3[mod_m$results()$SampleIDs,]
+rownames(val_m) <- val_m$SampleID
+pheno3_reorg <- val_m[mod_m$results()$SampleIDs, c("SampleID","Sex","Survival","Censored")]
 
+# now bind in the results to the phenotype data
 resdf <- cbind(pheno3_reorg, mod_m$results())
+resdf <- na.omit(resdf)
+resdf$Survival <- as.numeric(resdf$Survival)
 
-boxplot(resdf$days ~ resdf$BestCall, 
+boxplot(resdf$Survival ~ resdf$BestCall, 
         xlab='Model Prediction', ylab='Survival (days)')
 
    
@@ -328,15 +257,509 @@ boxplot(resdf$days ~ resdf$BestCall,
 
 c5_call <- ifelse(resdf$BestCall == 'cluster5', yes=1, no=0) #ifelse(mod_f$pred_table$cluster3 > 0.8, yes=1, no=0)
 
-boxplot(resdf$days ~ c5_call, 
+boxplot(resdf$Survival ~ c5_call, 
         xlab='Model Prediction', ylab='Survival (days)')
 
 library(survival)
 library(survminer)
 
-modfit <- survfit(Surv(days,status)~BestCalls,data=resdf)
+modfit <- survfit(Surv(Survival,Censored)~BestCalls,data=resdf)
 
 ggsurvplot(modfit, pval = T)
+ggsave('../figures/validation_survival_curve_M_16011.pdf')
+
+```
+
+
+
+
+
+
+
+
+
+Validation F REMBRANDT
+
+```{r}
+
+library(readr)
+library(robencla)
+
+library(survival)
+library(survminer)
+
+dat_f <- read_csv('../data/jive_training_array_data_F.csv')
+
+val_f <- read_csv('../data/Array Data/validation_array_gse108474_F.csv')
+
+load("../results/females_genepairs.rda")
+
+# all genes present!
+lapply(genepairs, function(x) x[! (x %in% colnames(dat_f))] )
+lapply(genepairs, function(x) x[! (x %in% colnames(val_f))] )
+
+genepairs$cluster5[25] <- "CTC-338M12_4"
+
+# removing signature genes that are not available in our data sets
+female.jive.gene.list <- readRDS("../data/Female_jive_cluster_genes.rds") %>% 
+  dplyr::filter(value %in% colnames(dat_f)) %>%
+  dplyr::filter(value %in% colnames(val_f))
+
+sigs_f <- list("C1"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster1'],
+               "C2"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster2'],
+               "C3"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster3'],
+               "C4"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster4'],
+               "C5"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster5']
+)
+
+# xgboost parameters to pass to each sub-classifier in the ensembles
+params <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+               eta=0.2,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
+               nrounds=12,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+               early_stopping_rounds=2,
+               nthreads=6,     # parallel threads
+               gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
+               lambda=1.2,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
+               alpha=0.2,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+               verbose=0,
+               train_perc=0.8,
+               combine_function='median',
+               size=11
+)
+
+
+mod_f <- robencla::Robencla$new('f_model')
+
+
+mod_f$train(data_frame=dat_f,
+            label_name='ClusterLabel',
+            sample_id = 'Barcode',
+            drop_list = c('Sex'),
+            data_mode=c('pairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
+            signatures=NULL,
+            pair_list=genepairs,  # subset to these genes.
+            params=params
+            )
+
+#save(mod_f, file='../models/females_tcga_array_step4_5.rda')
+
+### to run the model, we need the same column names as in the training data
+# but that's taken care of with pair cleaning ...
+
+mod_f$importance()
+
+# run the model
+mod_f$predict(data_frame = val_f, 
+              sample_id = 'SubjectID',
+              drop_list = c('Sex', 'Survival', 'Censored'))
+
+## check results
+table(mod_f$results()$BestCall)
+
+# get them reordered
+### selected females in order of results
+vidx <- match(val_f$SubjectID, mod_f$results()$SampleIDs)
+all(val_f$SubjectID == mod_f$results()$SampleIDs[vidx], na.rm=T)
+#data.frame(val_f$SubjectID, mod_f$results()$SampleIDs[vidx])
+
+pheno <- val_f[, c("SubjectID","Sex","Censored","Survival")]
+
+
+# now bind in the results to the phenotype data
+resdf <- cbind(pheno, mod_f$results()[vidx,])
+resdf$Survival <- as.numeric(resdf$Survival)
+resdf$Censored <- as.numeric(resdf$Censored)
+
+
+boxplot(resdf$Survival ~ resdf$BestCall, 
+        xlab='Model Prediction', ylab='Survival (days)')
+
+   
+# extra check
+
+c3_call <- ifelse(resdf$BestCall == 'cluster3', yes=1, no=0) #ifelse(mod_f$pred_table$cluster3 > 0.8, yes=1, no=0)
+
+boxplot(resdf$Survival ~ c3_call, 
+        xlab='Model Prediction', ylab='Survival (days)')
+
+modfit <- survfit(Surv(Survival,Censored)~BestCalls,data=resdf)
+
+ggsurvplot(modfit, pval = T)
+ggsave('../figures/validation_survival_curve_F_gse108474.pdf')
+
+```
+
+
+
+
+
+
+Validation M REMBRANDT
+
+```{r}
+
+library(readr)
+library(robencla)
+
+library(survival)
+library(survminer)
+
+dat_m <- read_csv('../data/jive_training_array_data_M_v2.csv')
+
+val_m <- read_csv('../data/Array Data/validation_array_gse108474_M.csv')
+
+load("../results/males_genepairs.rda")
+
+# where did NPEPPS go?
+# NPEPPS
+
+# GFOD3P has alias in the array data:
+which(colnames(val_f) == 'TP73-AS1')
+#[1] 14418
+colnames(val_f)[14418] <- 'GFOD3P'
+
+### clean up the genepairs
+genepairs_cl <- clean_genepairs_list(genepairs, dat_f)
+genepairs_cl <- clean_genepairs_list(genepairs_cl, val_f)
+
+## check for feature matches
+lapply(genepairs, function(x) sum(x %in% colnames(dat_f)))
+lapply(genepairs, function(x) sum(x %in% colnames(val_f)))
+lapply(genepairs,    function(x) x[!(x %in% colnames(dat_f))] )
+lapply(genepairs,    function(x) x[!(x %in% colnames(val_f))] )
+lapply(genepairs_cl, function(x) x[!(x %in% colnames(val_f))])
+
+
+# removing signature genes that are not available in our data sets
+female.jive.gene.list <- readRDS("../data/Female_jive_cluster_genes.rds") %>% 
+  dplyr::filter(value %in% colnames(dat_f)) %>%
+  dplyr::filter(value %in% colnames(val_f))
+
+sigs_f <- list("C1"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster1'],
+               "C2"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster2'],
+               "C3"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster3'],
+               "C4"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster4'],
+               "C5"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster5']
+)
+
+# xgboost parameters to pass to each sub-classifier in the ensembles
+params <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+               eta=0.45,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
+               nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+               early_stopping_rounds=2,
+               nthreads=8,     # parallel threads
+               gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
+               lambda=2.5,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
+               alpha=0.25,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+               verbose=0,
+               train_perc=0.8,
+               combine_function='median',
+               size=11
+)
+
+
+mod_m <- robencla::Robencla$new('m_model')
+
+
+mod_m$train(data_frame=dat_m,
+            label_name='ClusterLabel',
+            sample_id = 'Barcode',
+            drop_list = c('Sex'),
+            data_mode=c('pairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
+            signatures=NULL,
+            pair_list=genepairs_cl,  # subset to these genes.
+            params=params
+            )
+
+#save(mod_f, file='../models/females_tcga_array_step4_5.rda')
+
+### to run the model, we need the same column names as in the training data
+# but that's taken care of with pair cleaning ...
+
+mod_m$importance()
+
+# run the model
+mod_m$predict(data_frame = val_m, 
+              sample_id = 'SubjectID',
+              drop_list = c('Sex', 'Survival', 'Censored'))
+
+#mod_f$pred_table
+#mod_f$results()
+table(mod_m$results()$BestCall)
+## check results
+
+# get them reordered
+### selected females in order of results
+vidx <- match(val_m$SubjectID, mod_m$results()$SampleIDs)
+all(val_m$SubjectID == mod_m$results()$SampleIDs[vidx], na.rm=T)
+#data.frame(val_f$SubjectID, mod_f$results()$SampleIDs[vidx])
+
+pheno <- val_m[, c("SubjectID","Sex","Censored","Survival")]
+
+
+# now bind in the results to the phenotype data
+resdf <- cbind(pheno, mod_m$results()[vidx,])
+resdf$Survival <- as.numeric(resdf$Survival)
+resdf$Censored <- as.numeric(resdf$Censored)
+
+
+boxplot(resdf$Survival ~ resdf$BestCall, 
+        xlab='Model Prediction', ylab='Survival (days)')
+
+   
+# extra check
+
+c5_call <- ifelse(resdf$BestCall == 'cluster5', yes=1, no=0) #ifelse(mod_f$pred_table$cluster3 > 0.8, yes=1, no=0)
+
+boxplot(resdf$Survival ~ c5_call, 
+        xlab='Model Prediction', ylab='Survival (days)')
+
+
+modfit <- survfit(Surv(Survival,Censored)~BestCalls,data=resdf)
+
+ggsurvplot(modfit, pval = T)
+ggsave('../figures/validation_survival_curve_F_13041.pdf')
+
+```
+
+
+
+
+
+
+
+
+
+
+Validation F 13041
+
+```{r}
+
+library(readr)
+library(robencla)
+
+library(survival)
+library(survminer)
+
+dat_f <- read_csv('../data/jive_training_array_data_F_v2.csv')
+
+val_f <- read_csv('../data/Array Data/jive_validation_13041_ex3_F_v2.csv')
+
+load("../results/females_genepairs.rda")
+
+# GFOD3P has alias in the array data:
+which(colnames(val_f) == 'TP73-AS1')
+#[1] 8038
+colnames(val_f)[8038] <- 'GFOD3P'
+
+### clean up the genepairs
+genepairs_cl <- clean_genepairs_list(genepairs, dat_f)
+genepairs_cl <- clean_genepairs_list(genepairs_cl, val_f)
+
+## check for feature matches
+lapply(genepairs, function(x) sum(x %in% colnames(dat_f)))
+lapply(genepairs, function(x) sum(x %in% colnames(val_f)))
+lapply(genepairs,    function(x) x[!(x %in% colnames(val_f))] )
+lapply(genepairs_cl, function(x) x[!(x %in% colnames(val_f))])
+
+
+# removing signature genes that are not available in our data sets
+female.jive.gene.list <- readRDS("../data/Female_jive_cluster_genes.rds") %>% 
+  dplyr::filter(value %in% colnames(dat_f)) %>%
+  dplyr::filter(value %in% colnames(val_f))
+
+sigs_f <- list("C1"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster1'],
+               "C2"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster2'],
+               "C3"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster3'],
+               "C4"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster4'],
+               "C5"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster5']
+)
+
+# xgboost parameters to pass to each sub-classifier in the ensembles
+params <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+               eta=0.35,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
+               nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+               early_stopping_rounds=2,
+               nthreads=8,     # parallel threads
+               gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
+               lambda=2.5,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
+               alpha=0.25,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+               verbose=0,
+               train_perc=0.8,
+               combine_function='median',
+               size=11
+)
+
+
+mod_f <- robencla::Robencla$new('f_model')
+
+
+mod_f$train(data_frame=dat_f,
+            label_name='ClusterLabel',
+            sample_id = 'Barcode',
+            drop_list = c('Sex'),
+            data_mode=c('pairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
+            signatures=NULL,
+            pair_list=genepairs_cl,  # subset to these genes.
+            params=params
+            )
+
+#save(mod_f, file='../models/females_tcga_array_step4_5.rda')
+
+### to run the model, we need the same column names as in the training data
+# but that's taken care of with pair cleaning ...
+
+mod_f$importance()
+
+
+# run the model
+mod_f$predict(data_frame = val_f, 
+              sample_id = 'SampleID',
+              drop_list = c('Sex'))
+
+#mod_f$pred_table
+#mod_f$results()
+table(mod_f$results()$BestCall)
+## check results
+
+# get them reordered
+### selected females in order of results
+rownames(val_f) <- val_f$SampleID
+pheno3_reorg <- val_f[mod_f$results()$SampleIDs, c("SampleID","Sex","Survival","Censored")]
+
+# now bind in the results to the phenotype data
+resdf <- cbind(pheno3_reorg, mod_f$results())
+resdf <- na.omit(resdf)
+resdf$Survival <- as.numeric(resdf$Survival)
+
+boxplot(resdf$Survival ~ resdf$BestCall, 
+        xlab='Model Prediction', ylab='Survival (days)')
+
+   
+# extra check
+
+c3_call <- ifelse(resdf$BestCall == 'cluster3', yes=1, no=0) #ifelse(mod_f$pred_table$cluster3 > 0.8, yes=1, no=0)
+
+boxplot(resdf$Survival ~ c3_call, 
+        xlab='Model Prediction', ylab='Survival (days)')
+
+
+modfit <- survfit(Surv(Survival,Censored)~BestCalls,data=resdf)
+
+ggsurvplot(modfit, pval = T)
+ggsave('../figures/validation_survival_curve_F_13041.pdf')
+
+```
+
+
+
+
+13041 males
+
+```{r}
+
+
+library(readr)
+library(robencla)
+library(survival)
+library(survminer)
+
+dat_m <- read_csv('../data/jive_training_array_data_M_v2.csv')
+
+val_m <- read_csv('../data/Array Data/jive_validation_13041_ex3_M_v2.csv')
+
+load("../results/males_genepairs.rda")
+
+# removing signature genes that are not available in our data sets
+male.jive.gene.list <- readRDS("../data/Males_jive_cluster_genes.rds") %>% 
+  dplyr::filter(value %in% colnames(dat_m)) %>%
+  dplyr::filter(value %in% colnames(val_m))
+  
+genepairs_cl <- clean_genepairs_list(genepairs, dat_m)
+genepairs_cl <- clean_genepairs_list(genepairs_cl, val_m)
+
+lapply(genepairs, function(x) sum(x %in% colnames(dat_m)))
+lapply(genepairs, function(x) sum(x %in% colnames(val_m)))
+lapply(genepairs_cl, function(x) x[! (x %in% colnames(val_m))] )
+
+sigs.m <- list("C1"=male.jive.gene.list$value[male.jive.gene.list$cluster.group == 'cluster1'],
+               "C2"=male.jive.gene.list$value[male.jive.gene.list$cluster.group == 'cluster2'],
+               "C3"=male.jive.gene.list$value[male.jive.gene.list$cluster.group == 'cluster3'],
+               "C4"=male.jive.gene.list$value[male.jive.gene.list$cluster.group == 'cluster4'],
+               "C5"=male.jive.gene.list$value[male.jive.gene.list$cluster.group == 'cluster5']
+)
+
+
+# xgboost parameters to pass to each sub-classifier in the ensembles
+params <- list(max_depth=18,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+               eta=0.45,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
+               nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+               early_stopping_rounds=2,
+               nthreads=8,     # parallel threads
+               gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
+               lambda=2.5,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
+               alpha=0.25,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+               verbose=0,
+               train_perc=0.8,
+               combine_function='median',
+               size=11
+)
+
+
+mod_m <- robencla::Robencla$new('m_model')
+
+
+mod_m$train(data_frame=dat_m,
+            label_name='ClusterLabel',
+            sample_id = 'Barcode',
+            drop_list = c('Sex'),
+            data_mode=c('pairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
+            signatures=NULL,
+            pair_list=genepairs_cl,  # subset to these genes.
+            params=params
+            )
+
+
+mod_m$importance()
+
+
+# run the model
+mod_m$predict(data_frame = val_m, 
+              sample_id = 'SampleID',
+              drop_list = c('Sex'))
+
+
+#mod_f$pred_table
+#mod_f$results()
+table(mod_m$results()$BestCall)
+## check results
+
+# get them reordered
+### selected females in order of results
+rownames(val_m) <- val_m$SampleID
+pheno3_reorg <- val_m[mod_m$results()$SampleIDs, c("SampleID","Sex","Survival","Censored")]
+
+# now bind in the results to the phenotype data
+resdf <- cbind(pheno3_reorg, mod_m$results())
+resdf <- na.omit(resdf)
+resdf$Survival <- as.numeric(resdf$Survival)
+
+boxplot(resdf$Survival ~ resdf$BestCall, 
+        xlab='Model Prediction', ylab='Survival (days)')
+
+   
+# extra check
+c5_call <- ifelse(resdf$BestCall == 'cluster5', yes=1, no=0) #ifelse(mod_f$pred_table$cluster3 > 0.8, yes=1, no=0)
+
+boxplot(resdf$Survival ~ c5_call, 
+        xlab='Model Prediction', ylab='Survival (days)')
+
+
+
+modfit <- survfit(Surv(Survival,Censored)~BestCalls,data=resdf)
+
+ggsurvplot(modfit, pval = T)
+ggsave('../figures/validation_survival_curve_M_13041.pdf')
 
 ```
 

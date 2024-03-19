@@ -102,55 +102,22 @@ mat2$Survival <- pheno$survival_months
 mat2$Censored <- pheno$censored
 mat2[1:5,17525:17531]
 
+
+
+# GCOM1 alias of POLR2M (GRINL1A)
+# GCOM1, MYZAP-POLR2M Combined Locus
+i <- which(str_detect(colnames(mat2), "GCOM1"))
+#[1] 2395
+colnames(mat2)[i] <- 'POLR2M'
+
 # and we can separte by sex
 mat_f <- mat2[mat2$Sex == 'Female',]
 mat_m <- mat2[mat2$Sex == 'Male',]
-
-load('results/females_genepairs.rda')
-lapply(genepairs, function(gl) sum(gl %in% colnames(mat_f)) / length(gl))
-
 
 # can just try it for now....
 write.csv(mat_f, 'data/Array Data/jive_validation_16011_F.csv')
 write.csv(mat_m, 'data/Array Data/jive_validation_16011_M.csv')
 
-
-
-lapply(genepairs, function(gl) gl[! (gl %in% colnames(mat_f))] )
-#$cluster1
-#[1] "POLR2M"  "MARCHF1" "THSD1"  
-
-#$cluster2
-#[1] "CDK11B"  "FAM86B1"
-
-#$cluster3
-#[1] "HMX1"   "PRSS53" "TENM4" 
-
-#$cluster4
-#[1] "MTTP" "MTTP" "MTTP" "MTTP"
-
-#$cluster5
-#[1] "DND1"   "STEEP1" "DND1"   "ZNF783"
-
-
-# GCOM1 alias of POLR2M (GRINL1A)
-# GCOM1, MYZAP-POLR2M Combined Locus
-which(str_detect(colnames(mat_f), "GCOM1"))
-#[1] 2395
-
-# An important paralog of this gene is MARCHF8
-which(str_detect(colnames(mat_f), "MARCHF8")) # marchf10 and marchf11 #[1] 3012 8343
-#[1] 3893
-
-colnames(mat_f)[ which(str_detect(colnames(mat_f), "THSD")) ]
-#[1] "THSD7A" "THSD4"  "THSD7B"
-
-which(str_detect(colnames(mat_f), "CDK11A"))
-#[1] 13556
-
-colnames(mat_f)[2395] <- 'POLR2M'
-colnames(mat_f)[3893] <- 'MARCHF1'  
-colnames(mat_f)[13556] <- 'CDK11B'  # CDK11A is paralog of CDK11B  
 
 
 

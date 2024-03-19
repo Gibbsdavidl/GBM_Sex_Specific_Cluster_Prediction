@@ -256,14 +256,14 @@ save(mod_m, file='../models/males_tcga_array_step4.rda')
 ```
 
 ```{r}
-dat_f <- read_csv('../data/jive_training_array_data_F_v2.csv')
+dat_f <- read_csv('../data/jive_training_array_data_F.csv')
 
 load('../results/females_genepairs.rda')
 
+lapply(genepairs, function(x) x[! (x %in% colnames(dat_f))] )
+
 # removing signature genes that are not available in our data sets
 female.jive.gene.list <- readRDS("../data/Female_jive_cluster_genes.rds") %>% dplyr::filter(value %in% colnames(dat_f))
-
-female.jive.gene.list <-  female.jive.gene.list[-c(18,289),]  # "RP11-35N6_1"
 
 sigs_f <- list("C1"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster1'],
                "C2"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster2'],
@@ -282,45 +282,21 @@ table(dat_f$ClusterLabel)
 length(genepairs)
 ```
 
-```{r}
-
-clean_genepairs_list <- function(genepairs, dat) {
-  
-  genepairs_clean <- list()
-  i <- 1
-  for (pi in names(genepairs)) {
-    genes <- genepairs[[pi]]
-    missing_genes <- unique( genes [! genes %in% colnames(dat_f)] )
-    newpairlist <- c()
-    for (j in seq.int(from=1,to=length(genes), by=2)) {
-      if ( (genes[i] %in% missing_genes) | (genes[i+1] %in% missing_genes) ) {
-        # then don't add them!
-        print(paste0("removing from pair list:  ", genes[i], ' ', genes[i+1]))
-      } else {
-        newpairlist <- c(newpairlist, genes[i], genes[i+1])
-      }
-    }
-    genepairs_clean[[pi]] <- newpairlist
-  }
-  return(genepairs_clean)
-}
-
-
-genepairs_cl <- clean_genepairs_list(genepairs, dat_f)
-
-
-```
 
 ```{r}
 
 # in case we want to test it #
 idx <- sample(1:139, size=100, replace = F)
 jdx <- setdiff(1:139, idx)
-train <- dat_f[idx,1:14455]
-test <- dat_f[jdx,1:14455]
+train <- dat_f[idx,]
+test <- dat_f[jdx,]
 
 # our classifier object named Roberta
 buffy <- Robencla$new("buffy")
+
+# genes with dots in the symbol get transformed to _
+#lapply(genepairs, function(x) x[! (x %in% colnames(buffy$train_data))] )
+#genepairs$cluster5[25] <- "CTC-338M12_4"
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
 params <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
@@ -341,9 +317,9 @@ params <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I t
 buffy$train(data_frame=train,
             label_name='ClusterLabel',
             sample_id = 'Barcode',
-            #drop_list = 'Sex',
+            drop_list = 'Sex',
             data_mode='pairs', # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
-            signatures=sigs_f,
+            signatures=NULL,
             pair_list=genepairs,  # subset to these genes.
             params=params
             )
@@ -379,7 +355,7 @@ params <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I t
   )
 
 # First we use the training data
-buffy$autocv(data_frame=dat.f,
+buffy$autocv(data_frame=dat_f,
             label_name='ClusterLabel',
             sample_id = 'sample',
             drop_list = 'Sex',

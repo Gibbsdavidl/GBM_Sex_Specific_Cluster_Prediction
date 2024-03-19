@@ -26,6 +26,9 @@ library(doParallel)
 library(readr)
 library(stringr)
 
+if(!require("hgu133a.db", quietly = TRUE))
+  BiocManager::install("hgu133a.db")
+
 registerDoParallel(cores=6)
 
 
@@ -48,9 +51,6 @@ for (dir in list.dirs(path = cel_file_path, full.names = T)) {
 # then we'll save the list of processed data.
 save(datalist, dirlist, file='training_array_scan_proc.rda')
 
-load(file='training_array_scan_proc.rda')
-
-
 # then we'll combine the list of data sets
 tcga_gbm <- datalist[[1]]
 num_samples <- dim(datalist[[1]])[2]
@@ -62,14 +62,20 @@ for (i in 2:length(datalist)){
 print(num_samples)   # 537 + 23 = 560 samples all with 22277 features.
 print(dim(tcga_gbm)) # 560 samples
 save(tcga_gbm, file='data/TCGA_GBM_array_scan_reprocessed.rda')
-#load('data/TCGA_GBM_array_scan_reprocessed.rda')
+#load('data/Array Data/TCGA_GBM_array_scan_reprocessed.rda')
+
+
+
+load(file='data/Array Data/TCGA_GBM_array_scan_reprocessed.rda')
 
 
 # then extract the expression matrix
 m <- exprs(tcga_gbm) # matrix of intensities
 m_cols <- colnames(m)
+
+
 # links the file names to the GSM192382  IDs that are used in phenotype data
-datafreeze <- read_delim('data/GBM.Gene_Expression.Level_1/data.freeze.txt',delim = '\t')
+datafreeze <- read_delim('data/Array Data/validation_array_resources//data.freeze.txt',delim = '\t')
 sampleids <- c()
 # number of non-matched files
 unkn <- 1
@@ -96,6 +102,7 @@ for (mi in m_cols) {
   }
 }
 
+
 # spot check:
 {
   i <- 410
@@ -105,61 +112,30 @@ for (mi in m_cols) {
   print(sampleids[i])
 }
 
-
 #https://bioconductor.org/packages/release/data/annotation/html/pd.ht.hg.u133a.html
 #https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GPL3921
 #load('data/validation_array_data/symbols13041.rda')
 
-probemap_gpl3921 <- read_delim('data/GBM.Gene_Expression.Level_1/GPL3921-25447.txt',delim = '\t', comment = '#')
-sum(rownames(m) %in% probemap_gpl3921$ID)
-# 22277 matches as stated in the GPL3921 page
+dim(m)
 
-symbolslist3 <- c()
-unkn <- 1
-for (pi in rownames(m)) {
-  idx <- which(probemap_gpl3921$ID == pi)
-  si <- as.character(probemap_gpl3921[idx,'Gene Symbol'])
-  if ( (! is.na(as.vector(si)) ) && si != "" ) {
-    symbolslist3 <- c(symbolslist3, si)
-  } else {
-    symbolslist3 <- c(symbolslist3, paste("unknown",as.character(unkn),sep = "_"))
-    unkn <- unkn+1
-  }
-}
+# the stat used to filter out probes
+Xvar <- apply(m, 1, var, na.rm=T)
+
+# https://rdrr.io/github/Bioconductor/genefilter/man/findLargest.html
+# https://support.bioconductor.org/p/23397/
+fidx <- genefilter::findLargest(gN = rownames(m), testStat = Xvar, data = "hgu133a")
 
 
-# spot check:
-{
-  i <- 15100
-  # probe ID
-  pi <- rownames(m)[i]
-  # the gene symbol from the mapping
-  idx <- which(probemap_gpl3921$ID == pi)
-  si <- probemap_gpl3921[idx,'Gene Symbol']
-  print(pi)
-  print(si)
-  # the recorded symbol
-  print(symbolslist3[i])
-}
+# filter the probes
+Xfilt <- m[fidx,]
 
+xs <- hgu133aSYMBOL
+geneids <- sapply(rownames(Xfilt), function(a) xs[[a]])
+sum(duplicated(geneids))
 
-# there are duplicate symbols
-# we will sum them up and make the 
-# genes columns
-usymbols <- unique(symbolslist3)
-df <- data.frame(matrix(ncol = length(usymbols), nrow = ncol(m)))
-rownames(df) <- colnames(m)
-colnames(df) <- usymbols
-
-for (si in symbolslist3) {
-  gidx <- which(symbolslist3 == si)
-  if (length(gidx) > 1) {
-    vec_sum <- apply(m[gidx,], MARGIN = 2, FUN=sum)
-    df[,si] <- vec_sum
-  } else {
-    df[,si] <- m[gidx,]
-  }
-}
+# bring in the genes
+exprmat <- as.data.frame(t(Xfilt))
+colnames(exprmat) <- geneids
 
 
 ### symbolslist3 was better than gpl3921, had newer symbol names.
@@ -201,15 +177,12 @@ shortbarcodes <- (str_sub(sampleids[idx],start = 1,end=15))
 
 which(duplicated(shortbarcodes))  # NONE!!!!!!!!!!!!
 
-# replace colnames
-#tcga_gbm <- data.frame(t(m))
-tcga_gbm <- df
-#colnames(tcga_gbm) <- symbolslist3
-tcga_gbm <- tcga_gbm[idx,]
-rownames(tcga_gbm) <- shortbarcodes
+# subset the rows
+exprmat <- exprmat[idx,]
+rownames(exprmat) <- shortbarcodes
 
 # get the barcodes that were in the JIVE study
-jdx <- (rownames(tcga_gbm) %in% barcodeclusters$Barcode)
+jdx <- (rownames(exprmat) %in% barcodeclusters$Barcode)
 sum(jdx)
 
 barcodeclusters[!(barcodeclusters$Barcode %in% rownames(tcga_gbm)),]
@@ -222,17 +195,14 @@ x <- datafreeze[ (datafreeze$PATIENT_BARCODE == 'TCGA-06-0216') & (!is.na(datafr
 
 # merge in the cluster labels
 library(dplyr)
-tcga_gbm['Barcode'] <- rownames(tcga_gbm)
-jive_train_array <- inner_join(x = tcga_gbm, y= barcodeclusters, by=c('Barcode' = 'Barcode' ))
+exprmat['Barcode'] <- rownames(exprmat)
+jive_train_array <- inner_join(x = exprmat, y= barcodeclusters, by=c('Barcode' = 'Barcode' ))
 
 # split by sex
 jive_train_array_M <- jive_train_array[jive_train_array$Sex == 'M',]
 jive_train_array_F <- jive_train_array[jive_train_array$Sex == 'F',]
 
 write.csv(jive_train_array_M, file = 'data/jive_training_array_data_M.csv')
-save(jive_train_array_M, file = 'data/jive_training_array_data_M.rda')
-
 write.csv(jive_train_array_F, file = 'data/jive_training_array_data_F.csv')
-save(jive_train_array_F, file = 'data/jive_training_array_data_F.rda')
 
 

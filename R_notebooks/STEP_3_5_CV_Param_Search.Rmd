@@ -1,60 +1,168 @@
+
+
+Parameter search proceeded in two stages.
+1.) search over tree depth, number of rounds, and learning rate
+2.) with (1), search over alpha, lambda
+
+
 ```{r}
-dat.f <- read_csv('../data/jive_training_array_data_F_v2.csv')
+library(robencla)
+library(readr)
+library(ggplot2)
 
-load('../results/females_genepairs.rda')
 
-# removing signature genes that are not available in our data sets
-#female.jive.gene.list <- readRDS("../data/Female_jive_cluster_genes.rds") %>% dplyr::filter(value %in% colnames(dat.f))
-#female.jive.gene.list <-  female.jive.gene.list[-c(18,289),]  # "RP11-35N6_1"
+dat.f <- read_csv('data/jive_training_array_data_F_v2.csv')
 
-metrics_list <- list()
+load('results/females_genepairs.rda')
 
-for (md in c(3,6,8,10,12,16,18)) {
-  for (ei in c(0.05, 0.1, 0.2, 0.3, 0.5) ) {
-    for (ni in c(3, 6, 12, 18, 24, 32)) {
-      for (li in c(1.0, 1.2, 1.5, 1.8, 2)) {
-        for (ai in c(0.0, 0.2, 0.5, 0.8, 1.0)) {
+lapply(genepairs, function(a) sum(a %in% colnames(dat.f)))
+
+metrics_list2 <- list()
+i <- 1
+
+#for (md in c(3,6,8,10,12,16,18)) {
+#  for (ei in c(0.05, 0.1, 0.2, 0.3, 0.5) ) {
+#    for (ni in c(3, 6, 12, 18, 24, 32)) {
+      for (li in c(1.0, 1.5, 2.5, 3.5, 5.0)) {
+        for (ai in c(0.0, 0.5, 1.5, 2.5, 4.0)) {
           
           # our classifier object named Roberta
           buffy <- Robencla$new("buffy")
           
           # xgboost parameters to pass to each sub-classifier in the ensembles
-          params <- list(max_depth=md,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
-                           eta=ei,        # this is the learning rate. smaller values slow it down, more conservative   (xgboost parameter)
-                           nrounds=ni,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
-                           early_stopping_rounds=2,
-                           nthreads=8,     # parallel threads
-                           gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
-                           lambda=1.2,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
-                           alpha=0.2,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
-                           verbose=0,
-                           train_perc=0.8,
-                           combine_function='median',
-                           size=11
-            )
+          params <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+                         eta=0.45,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
+                         nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+                         early_stopping_rounds=2,
+                         nthreads=8,     # parallel threads
+                         gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
+                         lambda=li,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
+                         alpha=ai,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+                         verbose=0,
+                         train_perc=0.8,
+                         combine_function='median',
+                         size=11
+          )
           
           
           # First we use the training data
           buffy$autocv(data_frame=dat.f,
-                      label_name='ClusterLabel',
-                      sample_id = 'sample',
-                      drop_list = 'Sex',
-                      data_mode=c('pairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
-                      signatures=NULL,
-                      pair_list=genepairs,  # subset to these genes.
-                      params=params,
-                      cv_rounds=10
-                      )
+                       label_name='ClusterLabel',
+                       sample_id = 'sample',
+                       drop_list = 'Sex',
+                       data_mode=c('pairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
+                       signatures=NULL,
+                       pair_list=genepairs,  # subset to these genes.
+                       params=params,
+                       cv_rounds=10
+          )
           
           metrics <- buffy$classification_metrics()
           
-          metrics_list[[i]] <- list(params, metrics)
+          metrics_list2[[i]] <- list(params, metrics)
+          i <- i+1
+          print(i)
         }
-  
+        
+      }
+#    }
+#  }
+#}
+
+
+
+# round 1
+avgF1 <- unlist(lapply(metrics_list, function(x) x[[2]]["Average","F1"]))
+max_depth <- unlist(lapply(metrics_list, function(x) x[[1]]["max_depth"]))
+eta <- unlist(lapply(metrics_list, function(x) x[[1]]["eta"]))
+nrounds <- unlist(lapply(metrics_list, function(x) x[[1]]["nrounds"]))
+metrics_stage1 <- metrics_list # store it
+paramdf <- data.frame(AvgF1=avgF1, MaxDepth=max_depth, Eta=eta, nRounds=nrounds)
+# round 1 plots
+ggplot(paramdf, aes(x=MaxDepth, y=AvgF1, color=nRounds)) + geom_point() 
+ggplot(paramdf, aes(x=MaxDepth, z=AvgF1, y=nRounds)) + geom_contour_filled() 
+ggplot(paramdf, aes(x=MaxDepth, z=AvgF1, y=Eta)) + geom_contour_filled() 
+ggplot(paramdf, aes(x=MaxDepth, z=AvgF1, y=Eta)) + geom_contour_filled() 
+
+
+# round 2
+avgF1 <- unlist(lapply(metrics_list2, function(x) x[[2]]["Average","F1"]))
+alpha <- unlist(lapply(metrics_list2, function(x) x[[1]]["alpha"]))
+lambda <- unlist(lapply(metrics_list2, function(x) x[[1]]["lambda"]))
+paramdf <- data.frame(AvgF1=avgF1, Alpha=alpha, Lambda=lambda)
+# round 2 plots
+ggplot(paramdf, aes(x=Alpha, z=AvgF1, y=Lambda)) + geom_contour_filled() 
+
+
+
+
+############## checking the params ########################
+
+clean_genepairs_list <- function(genepairs, dat_x) {
+  genepairs_clean <- list()
+  i <- 1
+  for (pi in names(genepairs)) {
+    genes <- genepairs[[pi]]
+    missing_genes <- unique( genes [! genes %in% colnames(dat_x)] )
+    print(paste0(pi, '  ', missing_genes))
+    newpairlist <- c()
+    for (j in seq.int(from=1,to=length(genes), by=2)) {
+      if ( (genes[j] %in% missing_genes) | (genes[j+1] %in% missing_genes) ) {
+        # then don't add them!
+        print(paste0("removing from pair list:  ", genes[j], ' ', genes[j+1]))
+      } else {
+        newpairlist <- c(newpairlist, genes[j], genes[j+1])
       }
     }
+    genepairs_clean[[pi]] <- newpairlist
   }
+  return(genepairs_clean)
 }
+
+genepairs_cl <- clean_genepairs_list(genepairs, dat_f2)
+
+# our classifier object named Roberta
+buffy <- Robencla$new("buffy")
+
+# xgboost parameters to pass to each sub-classifier in the ensembles
+params <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+               eta=0.45,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
+               nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+               early_stopping_rounds=2,
+               nthreads=8,     # parallel threads
+               gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
+               lambda=2.5,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
+               alpha=0.25,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+               verbose=0,
+               train_perc=0.8,
+               combine_function='median',
+               size=11
+)
+
+
+# First we use the training data
+buffy$autocv(data_frame=dat_f2,
+             label_name='ClusterLabel',
+             sample_id = 'sample',
+             drop_list = 'Sex',
+             data_mode=c('pairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
+             signatures=NULL,
+             pair_list=genepairs_cl,  # subset to these genes.
+             params=params,
+             cv_rounds=10
+)
+
+buffy$classification_metrics()
+
+
+#            Label  Accuracy Sensitivity Specificity Precision        F1
+#cluster1 cluster1 0.8705036   0.9024390   0.8877551 0.7708333 0.8314607
+#cluster2 cluster2 0.8705036   0.8333333   0.9826087 0.9090909 0.8695652
+#cluster3 cluster3 0.8705036   1.0000000   1.0000000 1.0000000 1.0000000  ###
+#cluster4 cluster4 0.8705036   0.7500000   0.9831933 0.8823529 0.8108108
+#cluster5 cluster5 0.8705036   0.8750000   0.9696970 0.9210526 0.8974359
+#Average   Average 0.8705036   0.8721545   0.9646508 0.8966660 0.8818545
+
 
 
 ```
