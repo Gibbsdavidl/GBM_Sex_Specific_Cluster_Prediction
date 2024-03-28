@@ -256,9 +256,9 @@ save(mod_m, file='../models/males_tcga_array_step4.rda')
 ```
 
 ```{r}
-dat_f <- read_csv('../data/jive_training_array_data_F.csv')
+dat_f <- read_csv('../data/jive_training_array_data_F.csv.gz')
 
-load('../results/females_genepairs.rda')
+load('../results/females_genepairs_v2.rda')
 
 lapply(genepairs, function(x) x[! (x %in% colnames(dat_f))] )
 
@@ -397,7 +397,7 @@ pheatmap(tabtbl, cluster_rows = F, cluster_cols = F)
 
 ```{r}
 metrics <- buffy$classification_metrics()
-write_csv(metrics, file='../results/females_tcga_array_metrics_step4.csv')
+write_csv(metrics, file='../results/females_tcga_array_metrics_step4_v2.csv')
 metrics
 ```
 
@@ -405,7 +405,7 @@ metrics
 
 imp_list <- buffy$importance()
 
-save(imp_list, file='../results/female_CV_pairs_importance_step4.rda')
+save(imp_list, file='../results/female_CV_pairs_importance_step4_v2.rda')
 
 imp_list
 
@@ -438,11 +438,11 @@ ggplot(impdf, aes(x=Top10,y=Med_Info_Gain,color=Cluster)) + geom_line() +
 
 
 
-load('../results/female_CV_pairs_importance_step4.rda')
+load('../results/female_CV_pairs_importance_step4_v2.rda')
 
 allimp <- rbind(df1,df2,df3,df4,df5)
 
-write.csv(allimp, file='../results/female_importance_table.csv')
+write.csv(allimp, file='../results/female_importance_table_v2.csv')
 
 ```
 
@@ -455,12 +455,12 @@ plot_roc(buffy, 1, flip=T)
 
 ```{r}
 #ensemble_rocs(anne)
-plot_roc(buffy, 2, flip=F)
+plot_roc(buffy, 2, flip=T)
 ```
 
 ```{r}
 #ensemble_rocs(anne)
-plot_roc(buffy, 3, flip=F)
+plot_roc(buffy, 3, flip=T)
 ```
 
 ```{r}

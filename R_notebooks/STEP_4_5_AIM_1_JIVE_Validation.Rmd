@@ -58,12 +58,13 @@ First training the full model with all data.
 
 library(readr)
 library(robencla)
+Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 2)
 
-dat_f <- read_csv('../data/jive_training_array_data_F.csv')
+dat_f <- read_csv('../data/jive_training_array_data_F.csv.gz')
 
-val_f <- read_csv('../data/Array Data/jive_validation_16011_F.csv')
+val_f <- read_csv('../data/Array Data/jive_validation_16011_F.csv.gz')
 
-load("../results/females_genepairs.rda")
+load("../results/females_genepairs_v3.rda")
 
 lapply(genepairs, function(x) x[! (x %in% colnames(dat_f))] )
 lapply(genepairs, function(x) x[! (x %in% colnames(val_f))] )
@@ -71,9 +72,16 @@ lapply(genepairs, function(x) x[! (x %in% colnames(val_f))] )
 gidx <- which(colnames(val_f) == 'GFOD3P')
 colnames(val_f)[gidx] <- 'TP73-AS1'
 
+dat_f <- dat_f[,-1]
+
 genepairs_cl <- clean_genepairs_list(genepairs, dat_f)
 genepairs_cl <- clean_genepairs_list(genepairs_cl, val_f)
 
+# what if ...
+dat_f$ClusterLabel2 <- ifelse(dat_f$ClusterLabel == 'cluster3', yes = 'C3', no='notC3')
+c3_pairs <- list()
+c3_pairs[['C3']] <- genepairs_cl$cluster3
+c3_pairs[['notC3']] <- c(genepairs_cl$cluster1, genepairs_cl$cluster2, genepairs_cl$cluster4, genepairs_cl$cluster5)
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
 params <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
@@ -97,17 +105,13 @@ mod_f <- robencla::Robencla$new('f_model')
 mod_f$train(data_frame=dat_f,
             label_name='ClusterLabel',
             sample_id = 'Barcode',
-            drop_list = c('Sex'),
-            data_mode=c('pairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
-            signatures=NULL,
+            drop_list = c('Sex'), #,'ClusterLabel'),
+            data_mode=c('pairs'),    # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
+            signatures=NULL,         # 
             pair_list=genepairs_cl,  # subset to these genes.
             params=params
             )
 
-#save(mod_f, file='../models/females_tcga_array_step4_5.rda')
-
-### to run the model, we need the same column names as in the training data
-# but that's taken care of with pair cleaning ...
 
 # run the model
 mod_f$predict(data_frame = val_f, 
@@ -127,6 +131,9 @@ pheno3_reorg <- val_f[mod_f$results()$SampleIDs, c("SampleID","Sex","Survival","
 resdf <- cbind(pheno3_reorg, mod_f$results())
 resdf <- na.omit(resdf)
 resdf$Survival <- as.numeric(resdf$Survival)
+
+resdf$C3 <- unlist(resdf$C3)
+resdf$notC3 <- unlist(resdf$notC3)
 
 resdf$cluster1 <- unlist(resdf$cluster1)
 resdf$cluster2 <- unlist(resdf$cluster2)
@@ -151,8 +158,8 @@ library(survival)
 library(survminer)
 
 modfit <- survfit(Surv(Survival,Censored)~BestCalls,data=resdf)
-
 ggsurvplot(modfit, pval = T)
+
 ggsave('../figures/validation_survival_curve_F_16011.pdf')
 
 ```
@@ -290,15 +297,23 @@ library(survminer)
 
 dat_f <- read_csv('../data/jive_training_array_data_F.csv')
 
-val_f <- read_csv('../data/Array Data/validation_array_gse108474_F.csv')
+val_f <- read_csv('../data/Array Data/validation_array_gse108474_F.csv.gz')
 
-load("../results/females_genepairs.rda")
+load("../results/females_genepairs_v2.rda")
+
+dat_f <- dat_f[,-1]
 
 # all genes present!
 lapply(genepairs, function(x) x[! (x %in% colnames(dat_f))] )
 lapply(genepairs, function(x) x[! (x %in% colnames(val_f))] )
 
-genepairs$cluster5[25] <- "CTC-338M12_4"
+
+# what if ...
+dat_f$ClusterLabel2 <- ifelse(dat_f$ClusterLabel == 'cluster3', yes = 'C3', no='notC3')
+c3_pairs <- list()
+c3_pairs[['C3']] <- genepairs_cl$cluster3
+c3_pairs[['notC3']] <- c(genepairs_cl$cluster1, genepairs_cl$cluster2, genepairs_cl$cluster4, genepairs_cl$cluster5)
+
 
 # removing signature genes that are not available in our data sets
 female.jive.gene.list <- readRDS("../data/Female_jive_cluster_genes.rds") %>% 
@@ -314,7 +329,7 @@ sigs_f <- list("C1"=female.jive.gene.list$value[female.jive.gene.list$cluster.gr
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
 params <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
-               eta=0.2,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
+               eta=0.3,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
                nrounds=12,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
                early_stopping_rounds=2,
                nthreads=6,     # parallel threads
@@ -332,12 +347,12 @@ mod_f <- robencla::Robencla$new('f_model')
 
 
 mod_f$train(data_frame=dat_f,
-            label_name='ClusterLabel',
+            label_name='ClusterLabel2',
             sample_id = 'Barcode',
-            drop_list = c('Sex'),
+            drop_list = c('Sex','ClusterLabel'),
             data_mode=c('pairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
             signatures=NULL,
-            pair_list=genepairs,  # subset to these genes.
+            pair_list=c3_pairs,  # subset to these genes.
             params=params
             )
 
@@ -543,14 +558,10 @@ library(survminer)
 
 dat_f <- read_csv('../data/jive_training_array_data_F_v2.csv')
 
-val_f <- read_csv('../data/Array Data/jive_validation_13041_ex3_F_v2.csv')
+val_f <- read_csv('../data/Array Data/jive_validation_13041_ex3_F_v2.csv.gz')
 
-load("../results/females_genepairs.rda")
+load("../results/females_genepairs_v2.rda")
 
-# GFOD3P has alias in the array data:
-which(colnames(val_f) == 'TP73-AS1')
-#[1] 8038
-colnames(val_f)[8038] <- 'GFOD3P'
 
 ### clean up the genepairs
 genepairs_cl <- clean_genepairs_list(genepairs, dat_f)
@@ -595,9 +606,9 @@ mod_f <- robencla::Robencla$new('f_model')
 
 
 mod_f$train(data_frame=dat_f,
-            label_name='ClusterLabel',
+            label_name='ClusterLabel2',
             sample_id = 'Barcode',
-            drop_list = c('Sex'),
+            drop_list = c('Sex','ClusterLabel'),
             data_mode=c('pairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
             signatures=NULL,
             pair_list=genepairs_cl,  # subset to these genes.

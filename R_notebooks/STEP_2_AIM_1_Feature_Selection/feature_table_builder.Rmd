@@ -22,11 +22,11 @@ fc4 <- read_csv('results/feature_pairs_females_cluster4.csv') # was thresh66
 fc5 <- read_csv('results/feature_pairs_females_cluster5.csv') # was thresh04
 
 
-mc1 <- read_csv('results/feature_pairs_males_cluster1.csv')
-mc2 <- read_csv('results/feature_pairs_males_cluster2.csv') # was thresh04
-mc3 <- read_csv('results/feature_pairs_males_cluster3.csv')
-mc4 <- read_csv('results/feature_pairs_males_cluster4.csv')
-mc5 <- read_csv('results/feature_pairs_males_cluster5.csv')
+mc1 <- read_csv('results/run2_mean_diff/feature_pairs_males_cluster1.csv')
+mc2 <- read_csv('results/run2_mean_diff/feature_pairs_males_cluster2.csv')
+mc3 <- read_csv('results/run2_mean_diff/feature_pairs_males_cluster3.csv')
+mc4 <- read_csv('results/run2_mean_diff/feature_pairs_males_cluster4.csv')
+mc5 <- read_csv('results/run2_mean_diff/feature_pairs_males_cluster5.csv')
 
 ```
 

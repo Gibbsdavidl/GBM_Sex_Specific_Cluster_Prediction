@@ -11,196 +11,12 @@ output: html_document
 library(tidyverse)
 ```
 
-```{r}
-
-array_m <- read_csv('../data/jive_training_array_data_M.csv')
-
-resdf_m <- read_csv('../results/feature_selection_table_male.csv')
-
-(colnames(array_m))[12645:12647]
-#[1] "Barcode"      "ClusterLabel" "Sex"  
-
-table(resdf_m$cluster)
-
-# drop the first column of row numbers
-array_m <- array_m[,-1]
-
-
-```
-
-With the threshold held across clusters
-cluster1 cluster2 cluster3 cluster4 cluster5 
-       9        5      316      660    25568 
+First to read in the data and the feature selection metrics.
 
 
 ```{r}
 
-# don't count the annotation columns at the end
-array_ncol <- ncol(array_m)-3
-
-# first get the min value for each gene in the array data
-minExprVals <- apply(array_m[,1:array_ncol], 2, min, na.rm=T)
-
-# first get the min value for each gene in the array data
-medExprVals <- apply(array_m[,1:array_ncol], 2, median, na.rm=T)
-
-# get gene IDs from the array
-genesi <- colnames(array_m)[resdf_m$gene_i]
-genesj <- colnames(array_m)[resdf_m$gene_j]
-
-# get the medians and mins out
-medi <- medExprVals[resdf_m$gene_i]
-medj <- medExprVals[resdf_m$gene_j]
-mini <- minExprVals[resdf_m$gene_i]
-minj <- minExprVals[resdf_m$gene_j]
-
-
-annotdf_m <- resdf_m
-annotdf_m['gene_i_symbol'] <- genesi
-annotdf_m['gene_j_symbol'] <- genesj
-annotdf_m['gene_i_min'] <- mini
-annotdf_m['gene_j_min'] <- minj
-annotdf_m['gene_i_med'] <- medi
-annotdf_m['gene_j_med'] <- medj
-
-write.csv(annotdf_m, file = '../results/annotdf_m.csv')
-
-```
-
-
-
-```{r}
-
-getpairs <- function(pairmat, cluster_c, thresh, topn) {
-
-    #pairmat <- na.omit(pairmat)
-  
-    # remove unknown genes
-    idx <- !str_detect(pairmat$gene_i_symbol,'unknown_')
-    jdx <- !str_detect(pairmat$gene_j_symbol,'unknown_')
-    pairmat <- pairmat[idx&jdx,]
-  
-    filtmat <- pairmat[(pairmat$cluster == cluster_c), ]
-    # first filter the table by min expression value
-    #filtmat <- pairmat[ (pairmat$gene_i_min > thresh) & 
-    #                      (pairmat$gene_j_min > thresh) & 
-    #                      (pairmat$cluster == cluster_c), ]
-    
-    #idx <- order(filtmat$dist_ij_cluster, decreasing = T)[1:topn]
-    #jdx <- order(filtmat$dist_ij_cluster, decreasing = F)[1:topn]
-    topn <- min(topn, nrow(filtmat))
-    idx <- order(filtmat$prop_diff, decreasing = T)[1:topn]
-    jdx <- order(filtmat$prop_diff, decreasing = F)[1:topn]
-
-    upgenes <- c()
-    for (i in idx) {
-      upgenes <- c(upgenes, as.character(filtmat[i, 'gene_i_symbol']))
-      upgenes <- c(upgenes, as.character(filtmat[i, 'gene_j_symbol']))
-    }
-    dngenes <- c()
-    for (j in jdx) {
-      dngenes <- c(dngenes, as.character(filtmat[j, 'gene_i_symbol']))
-      dngenes <- c(dngenes, as.character(filtmat[j, 'gene_j_symbol']))
-    }
-
-    return( c(upgenes, dngenes) )    
-}
-
-genepairs <- list(
-  'cluster1'=getpairs(annotdf_m, 'cluster1', 0, 10),
-  'cluster2'=getpairs(annotdf_m, 'cluster2', 0, 10),
-  'cluster3'=getpairs(annotdf_m, 'cluster3', 0, 10),
-  'cluster4'=getpairs(annotdf_m, 'cluster4', 0, 10),
-  'cluster5'=getpairs(annotdf_m, 'cluster5', 0, 10)
-)
-
-```
-
-```{r}
-
-# getting the gene pairs mapped correctly to symbols.
-
-library(org.Hs.eg.db)
-
-# fix the symbols with multi-maps
-genepairs$cluster1[1]   <-"PLGLB2"
-genepairs$cluster1[31]  <- "PLGLB2"
-
-# for each cluster set, map to correct symbols
-symbolpairs <- lapply(genepairs,
-                      function(x) {
-                        select(org.Hs.eg.db,
-                               keys =  x,
-                               columns=c("ENTREZID","SYMBOL"),
-                               keytype="ALIAS")
-                        
-                      })
-
-symbolpairs[["cluster1"]] <- symbolpairs[["cluster1"]][!symbolpairs$cluster1$ENTREZID %in% c(79947,23173),] 
-
-symbolpairs[["cluster2"]]  # OK
-
-symbolpairs[["cluster3"]] <- symbolpairs[["cluster3"]][!symbolpairs$cluster3$ENTREZID %in% c(92856),] # map IMP4 to SPPL2B
-
-symbolpairs[["cluster4"]] <- symbolpairs[["cluster4"]][!symbolpairs$cluster4$ENTREZID %in% c(57147, 4669),] # map SCYL3 to CCL15
-symbolpairs[["cluster4"]][symbolpairs$cluster4$ALIAS == 'KIAA0404','SYMBOL'] <- 'ATG2A'
-symbolpairs[["cluster4"]][symbolpairs$cluster4$ALIAS == 'KIAA0664','SYMBOL'] <- 'CLUH'
-symbolpairs[["cluster4"]][symbolpairs$cluster4$ALIAS == 'LOC63920','SYMBOL'] <- 'IRF8' 
-
-
-symbolpairs[["cluster5"]] <- symbolpairs[["cluster5"]][!symbolpairs$cluster5$ENTREZID %in% c(770,100526739,51514,885,27165),] # map CA11 to GKN1, DTL to TNFSF13B, map CCK to RIPK2
-symbolpairs[["cluster5"]][symbolpairs$cluster5$ALIAS == 'MGC39900','SYMBOL'] <- 'TMSB15B'
- 
-
-genepairs <- lapply(symbolpairs, function(x) x$SYMBOL)
-
-```
-
-```{r}
-
-### Fix the gene names on the array now###
-
-# first get the alias to symbol table 
-fullmap <- rbind(symbolpairs$cluster1,symbolpairs$cluster2,
-                 symbolpairs$cluster3, symbolpairs$cluster4,
-                 symbolpairs$cluster5)
-fullmap <- unique(fullmap)
-
-# fix the multi-mapping colnames
-which(str_detect(colnames(array_m), 'PLGLB2')) # 4099
-colnames(array_m)[4099] <- "PLGLB2"
-
-# for each alias, map in the correct symbol
-for (i in 1:nrow(fullmap)){
-  ai <- fullmap$ALIAS[i]
-  si <- fullmap$SYMBOL[i]
-  idx <- which(colnames(array_m) == ai) 
-  print(paste0(ai, "  replaceing ", as.character(length(idx)), '  ', si))
-  colnames(array_m)[idx] <- si
-}
-
-write_csv(array_m, file='../data/jive_training_array_data_M_v2.csv')
-save(genepairs, file='../results/males_genepairs.rda')
-```
-
-
-
-
-
-
-
-
-# Now for the female samples # 
-
-
-
-
-
-
-```{r}
-### PULLING OUT SOME GENES
-
-array_f  <- read_csv('../data/jive_training_array_data_F.csv')
+array_f  <- read_csv('../data/jive_training_array_data_F.csv.gz')
 
 resdf_f <- read_csv('../results/feature_selection_table_female.csv')
 
@@ -212,6 +28,8 @@ table(resdf_f$cluster)
 tail(colnames(array_f))
 
 ```
+
+Then we can bring in the gene symbols
 
 ```{r}
 
@@ -243,79 +61,447 @@ annotdf_f['gene_j_min'] <- minj
 annotdf_f['gene_i_med'] <- medi
 annotdf_f['gene_j_med'] <- medj
 
+table(annotdf_f$cluster)
+
 write.csv(annotdf_f, file = '../results/annotdf_f.csv')
 ```
 
-
+Next we rank the gene pair selection metrics and take the best!
 
 
 ```{r}
 
-# previously took prop_diff into account also
-# resdf %>% dplyr::filter(cluster=='cluster1') %>% arrange( desc(abs(dist_ij_cluster))) %>% head(n=20)
-# resdf %>% dplyr::filter(cluster=='cluster1') %>% arrange( desc(abs(prop_diff))) %>% head(n=20)
+### number of pairs that we want.
+wanted_pairs <- 42
 
-getpairs <- function(pairmat, cluster_c, thresh, topn) {
+# by ordering the table by prop_diff * avg_dist_cluster * avg_dist_not_cluster
+# we are getting gene pairs with high proportions per cluster status
+# and on average, the distance between genes is high effect.
 
-    #pairmat <- na.omit(pairmat)
-  
-    # remove unknown genes
-    idx <- !str_detect(pairmat$gene_i_symbol,'unknown_')
-    jdx <- !str_detect(pairmat$gene_j_symbol,'unknown_')
-    pairmat <- pairmat[idx&jdx,]
-  
-    filtmat <- pairmat[(pairmat$cluster == cluster_c), ]
-    # first filter the table by min expression value
-    #filtmat <- pairmat[ (pairmat$gene_i_min > thresh) & 
-    #                      (pairmat$gene_j_min > thresh) & 
-    #                      (pairmat$cluster == cluster_c), ]
-    
-    #idx <- order(filtmat$dist_ij_cluster, decreasing = T)[1:topn]
-    #jdx <- order(filtmat$dist_ij_cluster, decreasing = F)[1:topn]
-    topn <- min(topn, nrow(filtmat))
-    idx <- order(filtmat$prop_diff, decreasing = T)[1:topn]
-    jdx <- order(filtmat$prop_diff, decreasing = F)[1:topn]
-    
-    upgenes <- c()
-    for (i in idx) {
-      upgenes <- c(upgenes, as.character(filtmat[i, 'gene_i_symbol']))
-      upgenes <- c(upgenes, as.character(filtmat[i, 'gene_j_symbol']))
-    }
-    dngenes <- c()
-    for (j in jdx) {
-      dngenes <- c(dngenes, as.character(filtmat[j, 'gene_i_symbol']))
-      dngenes <- c(dngenes, as.character(filtmat[j, 'gene_j_symbol']))
-    }
+# 1. prop diff must be high
+# 2. effect size must be high for within and outside of cluster
+# 3. direction of differences must be opposite for within and outside of cluster.
+# 3. reduce correlation across feature set, same gene picked many times..
 
-    return( c(upgenes, dngenes) )    
+# return the corrleation with the previously selected pairs
+getcors <- function(pairordtable, datatable, selected, proposal) {
+  corlist <- list()
+  for (k in 1:nrow(selected)) {
+    cor1 <- cor(array_f[,gp1$g1[k]], array_f[,gpk$g1]) # correlation with last pair
+    cor2 <- cor(array_f[,gp1$g1[k]], array_f[,gpk$g2]) # correlation with last pair
+    cor3 <- cor(array_f[,gp1$g2[k]], array_f[,gpk$g1]) # correlation with last pair
+    cor4 <- cor(array_f[,gp1$g2[k]], array_f[,gpk$g2]) # correlation with last pair
+    corlist[[k]] <- c(cor1, cor2, cor3, cor4)
+  }
+  return(corlist)
 }
 
-genepairs <- list(
-  'cluster1'=getpairs(annotdf_f, 'cluster1', 4.6, 10),
-  'cluster2'=getpairs(annotdf_f, 'cluster2', 4.6, 10),
-  'cluster3'=getpairs(annotdf_f, 'cluster3', 4.6, 10),
-  'cluster4'=getpairs(annotdf_f, 'cluster4', 4.2, 10),
-  'cluster5'=getpairs(annotdf_f, 'cluster5', 4.6, 10)
-)
+# convert the list of tables to genepairs list
+tab2list <- function(dflist) {
+  pairslist <- list()
+  for (ci in names(dflist)) {
+    df <- dflist[[ci]]
+    genepairs <- c()
+    for (k in 1:nrow(df)) {
+      genepairs <- c(genepairs, c(df[k,'g1'], df[k,'g2']))
+    }
+    pairslist[[ci]] <- genepairs
+  }
+  return(pairslist)
+}
+
+
+res0 <- list()
+
+for (this_cluster in c('cluster1','cluster2','cluster3','cluster4','cluster5')) {
+  
+  pwant <- wanted_pairs
+  
+  pairs <- annotdf_f[annotdf_f$cluster == this_cluster,]
+  
+  # create the values that will be used to order pairs.
+  pairs$index_val <-  abs(pairs$prop_diff)*(-1 *pairs$avg_dist_cluster*pairs$avg_dist_not_cluster)
+  
+  # then we get the ordering index
+  idx <- order(pairs$index_val, decreasing = T)
+  pairsord <- pairs[idx,]
+  
+  
+  # start with the top
+  gp1 <- data.frame(k=1, g1=pairsord$gene_i_symbol[1], g2=pairsord$gene_j_symbol[1], 
+                    pd=pairsord$prop_diff[1], iv=pairsord$index_val[1])
+  
+  kmax <- nrow(pairsord)
+
+  k <- 2 # decending the ordered pairs table
+  # for each row in the ordered pairs table
+  while (pwant > 0 & k < kmax) {
+    
+    # proposal: add this pair
+    gpk <- data.frame(k=k, g1=pairsord$gene_i_symbol[k], g2=pairsord$gene_j_symbol[k], 
+                      pd=pairsord$prop_diff[k], iv=pairsord$index_val[k])
+  
+    # check with previously selected pairs
+    corlist <- getcors(pairsord, array_f, gp1, gpk)  
+    
+    # if all correlation are low, accept the proposal
+    if ( all( unlist( lapply(corlist, function(a) abs( a < 0.85 ))) ) )  {
+      gp1 <- rbind(gp1, gpk)
+      pwant <- pwant-1
+      print(c(k, pwant))
+    }
+    
+    k <- k+1
+  }
+  
+  res0[[this_cluster]] <- gp1
+}
+
+genepairs <- tab2list(res0)
+
+save(genepairs, res0, file='../results/females_genepairs.rda')
+  
+```
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+array_m <- read_csv('../data/jive_training_array_data_M.csv.gz')
+
+resdf_m <- read_csv('../results/feature_selection_table_male.csv')
+
+table(resdf_m$cluster)
+
+# drop the first column of row numbers
+array_m <- array_m[,-1]
+          
+head(colnames(array_m))
+tail(colnames(array_m))
+
+```
+
+
+
+Then we can bring in the gene symbols
+
+```{r}
+
+# don't count the annotation columns at the end
+array_ncol <- ncol(array_m)-3
+
+# first get the min value for each gene in the array data
+minExprVals <- apply(array_m[,1:array_ncol], 2, min, na.rm=T)
+
+# first get the min value for each gene in the array data
+medExprVals <- apply(array_m[,1:array_ncol], 2, median, na.rm=T)
+
+# get gene IDs from the array
+genesi <- colnames(array_m)[resdf_m$gene_i]
+genesj <- colnames(array_m)[resdf_m$gene_j]
+
+# get the medians and mins out
+medi <- medExprVals[resdf_m$gene_i]
+medj <- medExprVals[resdf_m$gene_j]
+mini <- minExprVals[resdf_m$gene_i]
+minj <- minExprVals[resdf_m$gene_j]
+
+
+annotdf_m <- resdf_m
+annotdf_m['gene_i_symbol'] <- genesi
+annotdf_m['gene_j_symbol'] <- genesj
+annotdf_m['gene_i_min'] <- mini
+annotdf_m['gene_j_min'] <- minj
+annotdf_m['gene_i_med'] <- medi
+annotdf_m['gene_j_med'] <- medj
+
+table(annotdf_m$cluster)
+
+annotdf_m <- annotdf_m[(annotdf_m$gene_j_symbol != 'Barcode'),]
+
+write.csv(annotdf_m, file = '../results/annotdf_m.csv')
+```
+
+Next we rank the gene pair selection metrics and take the best!
+
+
+```{r}
+
+### number of pairs that we want.
+wanted_pairs <- 42
+
+# by ordering the table by prop_diff * avg_dist_cluster * avg_dist_not_cluster
+# we are getting gene pairs with high proportions per cluster status
+# and on average, the distance between genes is high effect.
+
+# 1. prop diff must be high
+# 2. effect size must be high for within and outside of cluster
+# 3. direction of differences must be opposite for within and outside of cluster.
+# 3. reduce correlation across feature set, same gene picked many times..
+
+# return the corrleation with the previously selected pairs
+getcors <- function(pairordtable, array_df, selected, proposal) {
+  corlist <- list()
+  for (k in 1:nrow(selected)) {
+    cor1 <- cor(array_df[,gp1$g1[k]], array_df[,gpk$g1]) # correlation with last pair
+    cor2 <- cor(array_df[,gp1$g1[k]], array_df[,gpk$g2]) # correlation with last pair
+    cor3 <- cor(array_df[,gp1$g2[k]], array_df[,gpk$g1]) # correlation with last pair
+    cor4 <- cor(array_df[,gp1$g2[k]], array_df[,gpk$g2]) # correlation with last pair
+    corlist[[k]] <- c(cor1, cor2, cor3, cor4)
+  }
+  return(corlist)
+}
+
+# convert the list of tables to genepairs list
+tab2list <- function(dflist) {
+  pairslist <- list()
+  for (ci in names(dflist)) {
+    df <- dflist[[ci]]
+    genepairs <- c()
+    for (k in 1:nrow(df)) {
+      genepairs <- c(genepairs, c(df[k,'g1'], df[k,'g2']))
+    }
+    pairslist[[ci]] <- genepairs
+  }
+  return(pairslist)
+}
+
+
+res0 <- list()
+
+for (this_cluster in c('cluster1','cluster2','cluster3','cluster4','cluster5')) {
+  
+  pwant <- wanted_pairs
+  
+  pairs <- annotdf_m[annotdf_m$cluster == this_cluster,]
+  
+  # create the values that will be used to order pairs.
+  pairs$index_val <-  abs(pairs$prop_diff)*(-1*pairs$avg_dist_cluster*pairs$avg_dist_not_cluster)
+  
+  # then we get the ordering index
+  idx <- order(pairs$index_val, decreasing = T)
+  pairsord <- pairs[idx,]
+  
+  
+  # start with the top
+  gp1 <- data.frame(k=1, g1=pairsord$gene_i_symbol[1], g2=pairsord$gene_j_symbol[1], 
+                    pd=pairsord$prop_diff[1], iv=pairsord$index_val[1])
+  
+  kmax <- nrow(pairsord)
+
+  k <- 2 # decending the ordered pairs table
+  # for each row in the ordered pairs table
+  while (pwant > 0 & k < kmax) {
+    
+    # proposal: add this pair
+    gpk <- data.frame(k=k, g1=pairsord$gene_i_symbol[k], g2=pairsord$gene_j_symbol[k], 
+                      pd=pairsord$prop_diff[k], iv=pairsord$index_val[k])
+  
+    # check with previously selected pairs
+    corlist <- getcors(pairsord, array_m, gp1, gpk)  
+    
+    # if all correlation are low, accept the proposal
+    if ( all( unlist( lapply(corlist, function(a) abs( a < 0.85 ))) ) )  {
+      gp1 <- rbind(gp1, gpk)
+      pwant <- pwant-1
+      print(c(k, pwant))
+    }
+    
+    k <- k+1
+  }
+  
+  res0[[this_cluster]] <- gp1
+}
+
+genepairs <- tab2list(res0)
+
+save(genepairs, res0, file='../results/males_genepairs.rda')
+  
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+Some plots related to feature selection: 
+
+```{r}
+
+res0[['cluster1']]$cluster <- 'cluster1'
+res0[['cluster2']]$cluster <- 'cluster2'
+res0[['cluster3']]$cluster <- 'cluster3'
+res0[['cluster4']]$cluster <- 'cluster4'
+res0[['cluster5']]$cluster <- 'cluster5'
+
+res0[['cluster1']]$pairnum <- 1:nrow(res0[['cluster1']])
+res0[['cluster2']]$pairnum <- 1:nrow(res0[['cluster2']])
+res0[['cluster3']]$pairnum <- 1:nrow(res0[['cluster3']])
+res0[['cluster4']]$pairnum <- 1:nrow(res0[['cluster4']])
+res0[['cluster5']]$pairnum <- 1:nrow(res0[['cluster5']])
+
+df <- do.call('rbind', res0)
+
+ggplot(data=df, aes(x=pairnum,y=iv, color=cluster)) +
+  geom_point()
+
 
 ```
 
 
 ```{r}
 
-save(genepairs, file='../results/females_genepairs.rda')
+res0[['cluster1']]$cluster <- 'cluster1'
+res0[['cluster2']]$cluster <- 'cluster2'
+res0[['cluster3']]$cluster <- 'cluster3'
+res0[['cluster4']]$cluster <- 'cluster4'
+res0[['cluster5']]$cluster <- 'cluster5'
+
+res0[['cluster1']]$pairnum <- 1:nrow(res0[['cluster1']])
+res0[['cluster2']]$pairnum <- 1:nrow(res0[['cluster2']])
+res0[['cluster3']]$pairnum <- 1:nrow(res0[['cluster3']])
+res0[['cluster4']]$pairnum <- 1:nrow(res0[['cluster4']])
+res0[['cluster5']]$pairnum <- 1:nrow(res0[['cluster5']])
+
+df <- do.call('rbind', res0)
+
+ggplot(data=df, aes(x=pairnum,y=iv, color=cluster)) +
+  geom_point()
+
 
 ```
+
+
+
+
+
+With the threshold held across clusters
+Show in New Window
+
+cluster1 cluster2 cluster3 cluster4 cluster5 
+       9        9      340     1168    21338 
+
 
 ```{r}
 
-# from the raw results pair table
-#i <- 3654
-#j <- 8660
-#resdf_f[(resdf_f$gene_i == 3654) & (resdf_f$gene_j == 8660),]
 
-#annotdf_f[(resdf_f$gene_i == 3654) & (resdf_f$gene_j == 8660),]
+c5pairs <- annotdf_m[annotdf_m$cluster == 'cluster5',]
 
-#       cluster  pair gene_i gene_j prop_this_cluster prop_not_cluster  dist_ij_cluster dist_ij_not_cluster prop_diff
-#65921 cluster3 65921   3654   8660                 1                0 4.59547434916667   -91.0549842018055         1
+qplot(x=prop_diff, y=dist_ij_not_cluster, data=c5pairs)
+
+summary(c1pairs$dist_ij_cluster)
+
+c1pairs <- c1pairs[c1pairs$dist_ij_cluster > 10,]
+
+idx <- order(c1pairs$prop_diff,decreasing = T)
+
+c1pairs[idx,]
+
+k <- 1
+
+iidx <- as.numeric( c1pairs[idx[k], 'gene_i'] )
+jidx <- as.numeric( c1pairs[idx[k], 'gene_j'] )
+
+valic <- array_m[array_m$ClusterLabel == 'cluster1', iidx] [[1]]
+valjc <- array_m[array_m$ClusterLabel == 'cluster1', jidx] [[1]]
+valid <- array_m[array_m$ClusterLabel != 'cluster1', iidx] [[1]]
+valjd <- array_m[array_m$ClusterLabel != 'cluster1', jidx] [[1]]
+
+#boxplot(list(valic, valjc, valid, valjd))
+
+df <- data.frame(genei=c(valic, valid), genej=c(valjc, valjd))
+
+qplot(x=1:nrow(df), y=df$genei - df$genej, 
+      color=c( rep.int(1, length(valic)), rep.int(2, length(valid)) )
+      )
+
 ```
+
+
+
+
+
+
+
+Some plots related to feature selection: 
+
+
+
+```{r}
+table(annotdf_f$cluster)
+
+
+c3pairs <- annotdf_f[annotdf_f$cluster == 'cluster3',]
+
+
+qplot(x=prop_diff, y=avg_dist_cluster, data=c3pairs)
+
+summary(c1pairs$dist_ij_cluster)
+
+
+c3pairs$index_val <-  abs(c3pairs$prop_diff)*(-1 *c3pairs$avg_dist_cluster*c3pairs$avg_dist_not_cluster)
+
+qplot(x=prop_diff, y=avg_dist_cluster, data=c3pairs, color= (index_val>1))
+
+
+hist(c3pairs$avg_dist_cluster)
+
+idx <- order(abs(c3pairs$avg_dist_cluster)*abs(c3pairs$prop_diff)*abs(c3pairs$avg_dist_not_cluster), decreasing = T)
+c3ord <- c3pairs[idx,]
+
+
+k <- 6 # which(c3ord$avg_dist_cluster > 0.5 & c3ord$prop_diff > 0.9)
+
+iidx <- as.numeric( c3ord[k, 'gene_i'] )
+jidx <- as.numeric( c3ord[k, 'gene_j'] )
+
+valic <- array_f[array_f$ClusterLabel == 'cluster3', iidx] [[1]]
+valjc <- array_f[array_f$ClusterLabel == 'cluster3', jidx] [[1]]
+valid <- array_f[array_f$ClusterLabel != 'cluster3', iidx] [[1]]
+valjd <- array_f[array_f$ClusterLabel != 'cluster3', jidx] [[1]]
+
+#boxplot(list(valic, valjc, valid, valjd))
+
+df <- data.frame(genei=c(valic, valid), genej=c(valjc, valjd), Cluster= c( rep.int('c3', length(valic)), rep.int('not_c3', length(valid)) ) )
+df$Expr_Diff <- df$genei - df$genej
+
+qplot(data=df, x=1:nrow(df), y=Expr_Diff, color=index_val)
+
+
+c3ord_sub <- c3ord[order(c3ord$prop_diff, decreasing = T), c(15,16,14,21)]
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

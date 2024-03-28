@@ -103,7 +103,6 @@ mat2$Censored <- pheno$censored
 mat2[1:5,17525:17531]
 
 
-
 # GCOM1 alias of POLR2M (GRINL1A)
 # GCOM1, MYZAP-POLR2M Combined Locus
 i <- which(str_detect(colnames(mat2), "GCOM1"))
