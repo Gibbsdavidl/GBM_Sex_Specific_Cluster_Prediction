@@ -22,14 +22,33 @@ library(robencla)
 library(pheatmap)
 ```
 
+```{r}
+
+# pairlist is a list of vectors (paired terms)
+# n is the number of pairs for each entry desired
+
+shorter_plist <- function(pairlist, n) {
+  newlist <- list()
+  for (ni in names(pairlist)) {
+    newlist[[ni]] <- pairlist[[ni]][1:(2*n)]
+  }
+  return(newlist)  
+}
+
+
+```
+
+
 
 ```{r}
-dat.m <- read_csv('../data/jive_training_array_data_M_v2.csv')
+dat.m <- read_csv('../data/jive_training_array_data_M.csv.gz')
 
 load("../results/males_genepairs.rda")
 
 # removing signature genes that are not available in our data sets
 male.jive.gene.list <- readRDS("../data/Males_jive_cluster_genes.rds") %>% dplyr::filter(value %in% colnames(dat.m))
+
+dat.m <- dat.m[,-1]
 ```
 
 ```{r}
@@ -38,8 +57,8 @@ table(dat.m$ClusterLabel)
 
 ```{r}
 dim(dat.m)
+print(tail(colnames(dat.m)))
 ```
-
 
 
 ```{r}
@@ -52,35 +71,37 @@ sigs.m <- list("C1"=male.jive.gene.list$value[male.jive.gene.list$cluster.group 
 )
 
 # in case we want to test it #
-idx <- sample(1:139, size=100, replace = F)
-jdx <- setdiff(1:139, idx)
-train <- dat.m[idx,1:14455]
-test <- dat.m[jdx,1:14455]
+idx <- sample(1:220, size=140, replace = F)
+jdx <- setdiff(1:220, idx)
+train <- dat.m[idx,1:ncol(dat.m)]
+test <- dat.m[jdx,1:ncol(dat.m)]
 
 # our classifier object named Roberta
 mod_m <- Robencla$new("male models")
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
 params <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
-                 eta=0.3,        # this is the learning rate. smaller values slow it down, more conservative   (xgboost parameter)
-                 nrounds=32,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
-                 early_stopping_rounds=2,
-                 nthreads=5,     # parallel threads
-                 gamma=0.1,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
-                 lambda=1.1,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
-                 alpha=0.1,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
-                 verbose=0,
-                 train_perc=0.8,
-                 combine_function='median',
-                 size=11
-  )
+               eta=0.45,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
+               nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+               early_stopping_rounds=2,
+               nthreads=8,     # parallel threads
+               gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
+               lambda=2.5,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
+               alpha=0.25,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+               verbose=0,
+               train_perc=0.8,
+               combine_function='median',
+               size=11
+)
+
+gpairs <- shorter_plist(genepairs, 5)
 
 mod_m$train(data_frame=train,
             label_name='ClusterLabel',
             sample_id = 'Barcode',
-            #drop_list = 'Sex',
-            data_mode=c('pairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
-            signatures=NULL,
+            drop_list = 'Sex',
+            data_mode=c('pairs','sigpairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
+            signatures=sigs.m,
             pair_list=genepairs,  # subset to these genes.
             params=params
             )
@@ -91,6 +112,8 @@ mod_m$predict(data_frame = test,
               #drop_list = 'Sex')
 
 table(mod_m$test_label, mod_m$results()$BestCall)
+
+mod_m$importance()
 ```
 
 
@@ -100,30 +123,32 @@ table(mod_m$test_label, mod_m$results()$BestCall)
 # our classifier object named Roberta
 mod_m <- Robencla$new("mod_m")
 
-# xgboost parameters to pass to each sub-classifier in the ensembles
-params <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
-                 eta=0.3,        # this is the learning rate. smaller values slow it down, more conservative   (xgboost parameter)
-                 nrounds=12,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
-                 early_stopping_rounds=2,
-                 nthreads=5,     # parallel threads
-                 gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
-                 lambda=1.2,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
-                 alpha=0.2,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
-                 verbose=0,
-                 train_perc=0.8,
-                 combine_function='median',
-                 size=11
-  )
 
+# xgboost parameters to pass to each sub-classifier in the ensembles
+params <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+               eta=0.45,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
+               nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+               early_stopping_rounds=2,
+               nthreads=8,     # parallel threads
+               gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
+               lambda=2.5,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
+               alpha=0.25,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+               verbose=0,
+               train_perc=0.8,
+               combine_function='median',
+               size=11
+)
+
+gpairs <- shorter_plist(genepairs, 10)
 
 # First we use the training data
 mod_m$autocv(data_frame=dat.m,
             label_name='ClusterLabel',
             sample_id = 'Barcode',
             drop_list='Sex',
-            data_mode=c('pairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
-            signatures=list(), #sigs.m,
-            pair_list=genepairs,  # subset to these genes.
+            data_mode=c('pairs','sigpairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
+            signatures=NULL, #sigs.m,
+            pair_list=gpairs,  # subset to these genes.
             params=params,
             cv_rounds=10
             )
@@ -138,10 +163,21 @@ df.m$cluster4 <- as.numeric(df.m$cluster4)
 df.m$cluster5 <- as.numeric(df.m$cluster5)
 head(df.m)
 
-write.table(as.data.frame(df.m), '../results/male_tcga_cv_pairs_only.csv', sep=',', quote = F, row.names = F)
+#write.table(as.data.frame(df.m), '../results/male_tcga_cv_pairs_and_sigpairs.csv', sep=',', quote = F, row.names = F)
+#write.table(as.data.frame(df.m), '../results/male_tcga_cv_pairs_only.csv', sep=',', quote = F, row.names = F)
 ```
 
 ```{r}
+
+
+save_pheatmap_pdf <- function(x, filename, width=7, height=7) {
+    stopifnot(!missing(x))
+    stopifnot(!missing(filename))
+    pdf(filename, width=width, height=height)
+    grid::grid.newpage()
+    grid::grid.draw(x$gtable)
+    dev.off()
+}
 
 tabdf <- table(Pred=df.m$BestCalls, True=df.m$Label)
 
@@ -152,7 +188,9 @@ tabtbl <- as.data.frame(tabdf) %>%
   select(-Pred) %>%
   scale(center = F) # Z-scores
 rownames(tabtbl) <- colnames(tabtbl)
-pheatmap(tabtbl, cluster_rows = F, cluster_cols = F, )
+
+p <- pheatmap(tabtbl, cluster_rows = F, cluster_cols = F)
+save_pheatmap_pdf(p, "../figures/males_TCGA_CV_heatmap.pdf", width=5, height=5)
 
 ```
 
@@ -199,7 +237,7 @@ colnames(impdf) <- c('Top10','Cluster','Med_Info_Gain')
 
 ggplot(impdf, aes(x=Top10,y=Med_Info_Gain,color=Cluster)) + geom_line() + 
   xlab("Top 10 features per cluster") + ylab("Median Information Gain")
-
+ggsave('../figures/males_TCGA_CV_feature_importance.pdf')
 
 allimp <- rbind(df1,df2,df3,df4,df5)
 
@@ -227,7 +265,7 @@ plot_roc(mod_m, 3, flip=T)
 
 ```{r}
 #ensemble_rocs(anne)
-plot_roc(mod_m, 4, flip=T)
+plot_roc(mod_m, 4, flip=F)
 ```
 
 ```{r}
@@ -238,6 +276,9 @@ plot_roc(mod_m, 5, flip=F)
 ```{r}
 save(mod_m, file='../models/males_tcga_array_step4.rda')
 ```
+
+
+
 
 
 
@@ -253,12 +294,21 @@ save(mod_m, file='../models/males_tcga_array_step4.rda')
 
 
 
+
+
+
 ```
+
+
+
+
+
+
 
 ```{r}
 dat_f <- read_csv('../data/jive_training_array_data_F.csv.gz')
 
-load('../results/females_genepairs_v2.rda')
+load('../results/females_genepairs.rda')
 
 lapply(genepairs, function(x) x[! (x %in% colnames(dat_f))] )
 
@@ -272,6 +322,8 @@ sigs_f <- list("C1"=female.jive.gene.list$value[female.jive.gene.list$cluster.gr
                "C5"=female.jive.gene.list$value[female.jive.gene.list$cluster.group == 'cluster5']
 )
 
+dat_f <- dat_f[,-1]
+
 ```
 
 ```{r}
@@ -279,7 +331,7 @@ table(dat_f$ClusterLabel)
 ```
 
 ```{r}
-length(genepairs)
+lapply(genepairs, length)
 ```
 
 
@@ -299,20 +351,21 @@ buffy <- Robencla$new("buffy")
 #genepairs$cluster5[25] <- "CTC-338M12_4"
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
-params <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
-                 eta=0.2,        # this is the learning rate. smaller values slow it down, more conservative   (xgboost parameter)
-                 nrounds=12,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
-                 early_stopping_rounds=2,
-                 nthreads=5,     # parallel threads
-                 gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
-                 lambda=1.2,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
-                 alpha=0.2,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
-                 verbose=0,
-                 train_perc=0.8,
-                 combine_function='median',
-                 size=11
-  )
+params <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+               eta=0.45,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
+               nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+               early_stopping_rounds=2,
+               nthreads=8,     # parallel threads
+               gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
+               lambda=2.5,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
+               alpha=0.25,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+               verbose=0,
+               train_perc=0.8,
+               combine_function='median',
+               size=11
+)
 
+gpairs <- shorter_plist(genepairs, 5)
 
 buffy$train(data_frame=train,
             label_name='ClusterLabel',
@@ -320,14 +373,14 @@ buffy$train(data_frame=train,
             drop_list = 'Sex',
             data_mode='pairs', # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
             signatures=NULL,
-            pair_list=genepairs,  # subset to these genes.
+            pair_list=gpairs,  # subset to these genes.
             params=params
             )
 
 buffy$predict(data_frame = test, 
               label_name = 'ClusterLabel', 
-              sample_id = 'Barcode')#,
-              #drop_list = 'Sex')
+              sample_id = 'Barcode',
+              drop_list = 'Sex')
 
 table(buffy$test_label, buffy$results()$BestCall)
 
@@ -340,19 +393,22 @@ table(buffy$test_label, buffy$results()$BestCall)
 buffy <- Robencla$new("buffy")
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
-params <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
-                 eta=0.3,        # this is the learning rate. smaller values slow it down, more conservative   (xgboost parameter)
-                 nrounds=12,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
-                 early_stopping_rounds=2,
-                 nthreads=5,     # parallel threads
-                 gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
-                 lambda=1.2,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
-                 alpha=0.2,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
-                 verbose=0,
-                 train_perc=0.8,
-                 combine_function='median',
-                 size=11
-  )
+params <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+               eta=0.45,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
+               nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+               early_stopping_rounds=2,
+               nthreads=8,     # parallel threads
+               gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
+               lambda=2.5,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
+               alpha=0.25,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+               verbose=0,
+               train_perc=0.8,
+               combine_function='median',
+               size=11
+)
+
+
+glist <- shorter_plist(genepairs, 10)
 
 # First we use the training data
 buffy$autocv(data_frame=dat_f,
@@ -361,7 +417,7 @@ buffy$autocv(data_frame=dat_f,
             drop_list = 'Sex',
             data_mode=c('pairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
             signatures=NULL,
-            pair_list=genepairs,  # subset to these genes.
+            pair_list=glist,  # subset to these genes.
             params=params,
             cv_rounds=10
             )
@@ -381,6 +437,15 @@ write.table(as.data.frame(df.f), '../results/female_cv_pairs_step4.csv', sep=','
 
 ```{r}
 
+save_pheatmap_pdf <- function(x, filename, width=7, height=7) {
+    stopifnot(!missing(x))
+    stopifnot(!missing(filename))
+    pdf(filename, width=width, height=height)
+    grid::grid.newpage()
+    grid::grid.draw(x$gtable)
+    dev.off()
+}
+
 tabdf <- table(Pred=df.f$BestCalls, True=df.f$Label)
 
 print(tabdf)
@@ -391,13 +456,15 @@ tabtbl <- as.data.frame(tabdf) %>%
   scale(center = F) # Z-scores
 rownames(tabtbl) <- colnames(tabtbl)
 
-pheatmap(tabtbl, cluster_rows = F, cluster_cols = F)
+p <- pheatmap(tabtbl, cluster_rows = F, cluster_cols = F)
+
+save_pheatmap_pdf(p, "../figures/female_TCGA_CV_heatmap.pdf")
 
 ```
 
 ```{r}
 metrics <- buffy$classification_metrics()
-write_csv(metrics, file='../results/females_tcga_array_metrics_step4_v2.csv')
+write_csv(metrics, file='../results/females_tcga_array_metrics_step4.csv')
 metrics
 ```
 
@@ -405,7 +472,7 @@ metrics
 
 imp_list <- buffy$importance()
 
-save(imp_list, file='../results/female_CV_pairs_importance_step4_v2.rda')
+save(imp_list, file='../results/female_CV_pairs_importance_step4.rda')
 
 imp_list
 
@@ -435,14 +502,14 @@ colnames(impdf) <- c('Top10','Cluster','Med_Info_Gain')
 
 ggplot(impdf, aes(x=Top10,y=Med_Info_Gain,color=Cluster)) + geom_line() + 
   xlab("Top 10 features per cluster") + ylab("Median Information Gain")
+ggsave("../figures/female_TCGA_CV_feature_importance.pdf")
 
 
-
-load('../results/female_CV_pairs_importance_step4_v2.rda')
+load('../results/female_CV_pairs_importance_step4.rda')
 
 allimp <- rbind(df1,df2,df3,df4,df5)
 
-write.csv(allimp, file='../results/female_importance_table_v2.csv')
+write.csv(allimp, file='../results/female_importance_table.csv')
 
 ```
 

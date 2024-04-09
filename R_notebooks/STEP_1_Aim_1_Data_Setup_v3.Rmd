@@ -64,16 +64,30 @@ TCGA <- "
     GROUP BY gexp.case_id, gene_name, clin.demo__gender, clin.diag__age_at_diagnosis,demo__race,clin.demo__ethnicity, clin.demo__vital_status,clin.submitter_id, 
              clin.demo__days_to_death, clin.diag__days_to_last_follow_up,clin.exp__created_datetime
     "
+
+TCGA2 <- "
+    SELECT gexp.case_id, gexp.gene_name, clin.demo__gender, clin.demo__vital_status, clin.demo__days_to_death, clin.diag__age_at_diagnosis,clin.demo__race,clin.demo__ethnicity,
+    AVG( LOG10(gexp.unstranded +1 ) ) as gene_exp
+    FROM gbm-gender.tcga_gbm.rnaseq_gencode36_hg38 as gexp
+    JOIN isb-cgc-bq.TCGA_versioned.clinical_gdc_r31 as clin
+    ON gexp.case_id = clin.submitter_id
+    WHERE gexp.sample_type = 'Primary Tumor'
+        AND gene_type = 'protein_coding'
+        AND primary_site = 'Brain'
+    GROUP BY gexp.case_id, gene_name, clin.demo__gender, clin.diag__age_at_diagnosis,demo__race,clin.demo__ethnicity, clin.demo__vital_status,clin.submitter_id, 
+             clin.demo__days_to_death, clin.diag__days_to_last_follow_up,clin.exp__created_datetime
+    "
+
 ```
 
 ```{r}
-tcga.import <- bq_project_query('gbm-gender', query = TCGA) #Put data in temporary BQ table
+tcga.import <- bq_project_query('gbm-gender', query = TCGA2) #Put data in temporary BQ table
 
 tcga_dwnld <- bq_table_download(tcga.import) #Put data into a dataframe
 
-write.table(tcga_dwnld, file = '../../rawdata/tempus_dwnld.csv', quote = F, row.names = F, sep = ',')
+write.table(tcga_dwnld, file = '../data/rnaseq_dwnld.csv', quote = F, row.names = F, sep = ',')
 
-tcga_dwnld <- read_csv('../data/bq-results-20240316__TCGA_RNA_seq.csv')
+#tcga_dwnld <- read_csv('../data/bq-results-20240316__TCGA_RNA_seq_unstranded.csv')
 
 head(tcga_dwnld)
 
@@ -117,8 +131,8 @@ dim(rnaseq.f)
 ```
 
 ```{r}
-write.csv(rnaseq.m,"../data/Males_RNASeq_Data.csv",row.names=F)
-write.csv(rnaseq.f,"../data/Females_RNASeq_Data.csv",row.names=F)
+write.csv(rnaseq.m,"../data/Males_RNASeq_Data_unstranded.csv",row.names=F)
+write.csv(rnaseq.f,"../data/Females_RNASeq_Data_unstranded.csv",row.names=F)
 ```
 
 
@@ -136,11 +150,21 @@ TEMPUS <- "
             AND gexp.gene_type = 'protein_coding'
     GROUP BY case_id, gene_name, clin.Sex, clin.Age_at_Diagnosis, clin.survival_status, clin.Survival_days"
 
-tempus.import <- bq_project_query ('gbm-gender', query = TEMPUS) #Put data in temporary BQ table
+
+TEMPUS2 <- "
+    SELECT gexp.case_id, clin.Sex, clin.Age_at_Diagnosis, clin.survival_status, clin.Survival_days, gexp.gene_name, AVG( LOG10(gexp.unstranded +1 ) ) as gene_exp
+        FROM `tempus_group_level.rnaseq_gencode36_hg38` as gexp
+        JOIN `tempus_group_level.clin` as clin
+        ON gexp.case_id = clin.Subject_ID
+            AND gexp.gene_type = 'protein_coding'
+    GROUP BY case_id, gene_name, clin.Sex, clin.Age_at_Diagnosis, clin.survival_status, clin.Survival_days"
+
+
+tempus.import <- bq_project_query ('gbm-gender', query = TEMPUS2) #Put data in temporary BQ table
 
 tempus_dwnld<- bq_table_download(tempus.import) #Put data into a dataframe
 
-write.table(tempus_dwnld, file = '../../rawdata/tempus_dwnld.csv', quote = F, row.names = F, sep = ',')
+write.table(tempus_dwnld, file = '../data/tempus_dwnld_unstranded.csv', quote = F, row.names = F, sep = ',')
 
 
 
@@ -177,10 +201,10 @@ dim(tempus_female2)
 
 ```{r}
 #tempus.m.test$cluster.group <- NA
-write.csv(tempus_male2,"../data/Tempus_Males.csv",row.names=F)
+write.csv(tempus_male2,"../data/Tempus_Males_unstranded.csv",row.names=F)
 
 #tempus.f.test$cluster.group <- NA
-write.csv(tempus_female2,"../data/Tempus_Females.csv",row.names=F)
+write.csv(tempus_female2,"../data/Tempus_Females_unstranded.csv",row.names=F)
 ```
 
 
