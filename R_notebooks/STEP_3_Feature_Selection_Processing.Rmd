@@ -71,6 +71,8 @@ Next we rank the gene pair selection metrics and take the best!
 
 ```{r}
 
+
+
 ### number of pairs that we want.
 wanted_pairs <- 42
 
@@ -117,7 +119,13 @@ for (this_cluster in c('cluster1','cluster2','cluster3','cluster4','cluster5')) 
   
   pwant <- wanted_pairs
   
-  pairs <- annotdf_f[annotdf_f$cluster == this_cluster,]
+  pairs <- annotdf_f[(annotdf_f$cluster == this_cluster),]
+  min_i_tval <- quantile(pairs$gene_i_min,na.rm=T)['25%']
+  min_j_tval <- quantile(pairs$gene_j_min,na.rm=T)['25%']
+  
+  
+  pairs <- pairs[(pairs$gene_i_min > min_i_tval) &
+                 (pairs$gene_j_min > min_j_tval),]
   
   # create the values that will be used to order pairs.
   pairs$index_val <-  abs(pairs$prop_diff)*(-1 *pairs$avg_dist_cluster*pairs$avg_dist_not_cluster)
@@ -281,7 +289,13 @@ for (this_cluster in c('cluster1','cluster2','cluster3','cluster4','cluster5')) 
   
   pwant <- wanted_pairs
   
-  pairs <- annotdf_m[annotdf_m$cluster == this_cluster,]
+  pairs <- annotdf_m[(annotdf_m$cluster == this_cluster),]
+  min_i_tval <- quantile(pairs$gene_i_min, na.rm=T)['25%']
+  min_j_tval <- quantile(pairs$gene_j_min, na.rm=T)['25%']
+  
+  
+  pairs <- pairs[(pairs$gene_i_min > min_i_tval) &
+                 (pairs$gene_j_min > min_j_tval),]
   
   # create the values that will be used to order pairs.
   pairs$index_val <-  abs(pairs$prop_diff)*(-1*pairs$avg_dist_cluster*pairs$avg_dist_not_cluster)

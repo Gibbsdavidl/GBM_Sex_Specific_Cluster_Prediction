@@ -75,7 +75,31 @@ load("../results/females_genepairs.rda")
 ```
 ```{r}
 
-gpairs <- shorter_plist(genepairs, 24)
+# checking the correlation between platforms
+
+gene <- genepairs$cluster3[1]
+
+barcodes <- str_sub(dat_f$Barcode, 1, 12)
+d1 <- data.frame(Barcode=barcodes, ArrayGene=dat_f[,gene], Cluster=dat_f$ClusterLabel)
+colnames(d1)[2] <- 'ArrayGene'
+rownames(d1) <-barcodes
+
+r1 <- data.frame(Barcode=val_f$sample, RNASeqGene=val_f[,gene])
+colnames(r1)[2] <- 'RNASeqGene'
+rownames(r1) <- r1$Barcode
+
+x1 <- inner_join(d1,r1)
+
+qplot(x=ArrayGene, y=RNASeqGene, color=Cluster, data=x1)
+
+print( cor(x1$ArrayGene, x1$RNASeqGene) )
+```
+
+
+
+```{r}
+
+gpairs <- shorter_plist(genepairs, 5)
 
 lapply(gpairs, function(x) x[! (x %in% colnames(dat_f ))] )
 lapply(gpairs, function(x) x[! (x %in% colnames(val_f ))] ) # missing "FABP5"  "CD24"   "LGALS3"
