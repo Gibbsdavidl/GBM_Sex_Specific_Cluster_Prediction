@@ -74,7 +74,7 @@ Next we rank the gene pair selection metrics and take the best!
 
 
 ### number of pairs that we want.
-wanted_pairs <- 42
+wanted_pairs <- 32
 
 # by ordering the table by prop_diff * avg_dist_cluster * avg_dist_not_cluster
 # we are getting gene pairs with high proportions per cluster status
@@ -120,8 +120,9 @@ for (this_cluster in c('cluster1','cluster2','cluster3','cluster4','cluster5')) 
   pwant <- wanted_pairs
   
   pairs <- annotdf_f[(annotdf_f$cluster == this_cluster),]
-  min_i_tval <- quantile(pairs$gene_i_min,na.rm=T)['25%']
-  min_j_tval <- quantile(pairs$gene_j_min,na.rm=T)['25%']
+  
+  min_i_tval <- quantile(pairs$gene_i_min,na.rm=T)['50%']
+  min_j_tval <- quantile(pairs$gene_j_min,na.rm=T)['50%']
   
   
   pairs <- pairs[(pairs$gene_i_min > min_i_tval) &
@@ -290,8 +291,8 @@ for (this_cluster in c('cluster1','cluster2','cluster3','cluster4','cluster5')) 
   pwant <- wanted_pairs
   
   pairs <- annotdf_m[(annotdf_m$cluster == this_cluster),]
-  min_i_tval <- quantile(pairs$gene_i_min, na.rm=T)['25%']
-  min_j_tval <- quantile(pairs$gene_j_min, na.rm=T)['25%']
+  min_i_tval <- quantile(pairs$gene_i_min, na.rm=T)['50%']
+  min_j_tval <- quantile(pairs$gene_j_min, na.rm=T)['50%']
   
   
   pairs <- pairs[(pairs$gene_i_min > min_i_tval) &
@@ -414,9 +415,9 @@ cluster1 cluster2 cluster3 cluster4 cluster5
 ```{r}
 
 
-c5pairs <- annotdf_m[annotdf_m$cluster == 'cluster5',]
+c3pairs <- annotdf_f[annotdf_f$cluster == 'cluster3',]
 
-qplot(x=prop_diff, y=dist_ij_not_cluster, data=c5pairs)
+qplot(x=prop_diff, y=avg_dist_not_cluster, data=c3pairs)
 
 summary(c1pairs$dist_ij_cluster)
 
@@ -426,17 +427,20 @@ idx <- order(c1pairs$prop_diff,decreasing = T)
 
 c1pairs[idx,]
 
-k <- 1
 
-iidx <- as.numeric( c1pairs[idx[k], 'gene_i'] )
-jidx <- as.numeric( c1pairs[idx[k], 'gene_j'] )
 
-valic <- array_m[array_m$ClusterLabel == 'cluster1', iidx] [[1]]
-valjc <- array_m[array_m$ClusterLabel == 'cluster1', jidx] [[1]]
-valid <- array_m[array_m$ClusterLabel != 'cluster1', iidx] [[1]]
-valjd <- array_m[array_m$ClusterLabel != 'cluster1', jidx] [[1]]
 
-#boxplot(list(valic, valjc, valid, valjd))
+
+k <- 3
+iidx <- as.numeric( pairsord[k, 'gene_i'] )
+jidx <- as.numeric( pairsord[k, 'gene_j'] )
+
+valic <- array_f[array_f$ClusterLabel == 'cluster3', iidx] [[1]]
+valjc <- array_f[array_f$ClusterLabel == 'cluster3', jidx] [[1]]
+valid <- array_f[array_f$ClusterLabel != 'cluster3', iidx] [[1]]
+valjd <- array_f[array_f$ClusterLabel != 'cluster3', jidx] [[1]]
+
+boxplot(list(valic, valjc, valid, valjd))
 
 df <- data.frame(genei=c(valic, valid), genej=c(valjc, valjd))
 

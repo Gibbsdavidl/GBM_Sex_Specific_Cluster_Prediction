@@ -15,18 +15,18 @@ library(readr)
 
 ```{r}
 
-fc1 <- read_csv('results/feature_pairs_females_cluster1.csv') # was thresh04
-fc2 <- read_csv('results/feature_pairs_females_cluster2.csv')
-fc3 <- read_csv('results/feature_pairs_females_cluster3.csv')
-fc4 <- read_csv('results/feature_pairs_females_cluster4.csv') # was thresh66
-fc5 <- read_csv('results/feature_pairs_females_cluster5.csv') # was thresh04
+fc1 <- read_csv('results/run4/feature_pairs_females_cluster1.csv') # was thresh04
+fc2 <- read_csv('results/run4/feature_pairs_females_cluster2.csv')
+fc3 <- read_csv('results/run4/feature_pairs_females_cluster3.csv')
+fc4 <- read_csv('results/run4/feature_pairs_females_cluster4.csv') # was thresh66
+fc5 <- read_csv('results/run4/feature_pairs_females_cluster5.csv') # was thresh04
 
 
-mc1 <- read_csv('results/run2_mean_diff/feature_pairs_males_cluster1.csv')
-mc2 <- read_csv('results/run2_mean_diff/feature_pairs_males_cluster2.csv')
-mc3 <- read_csv('results/run2_mean_diff/feature_pairs_males_cluster3.csv')
-mc4 <- read_csv('results/run2_mean_diff/feature_pairs_males_cluster4.csv')
-mc5 <- read_csv('results/run2_mean_diff/feature_pairs_males_cluster5.csv')
+mc1 <- read_csv('results/run4/feature_pairs_males_cluster1.csv')
+mc2 <- read_csv('results/run4/feature_pairs_males_cluster2.csv')
+mc3 <- read_csv('results/run4/feature_pairs_males_cluster3.csv')
+mc4 <- read_csv('results/run4/feature_pairs_males_cluster4.csv')
+mc5 <- read_csv('results/run4/feature_pairs_males_cluster5.csv')
 
 ```
 
