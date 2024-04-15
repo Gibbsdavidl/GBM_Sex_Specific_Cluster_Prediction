@@ -61,6 +61,11 @@ annotdf_f['gene_j_min'] <- minj
 annotdf_f['gene_i_med'] <- medi
 annotdf_f['gene_j_med'] <- medj
 
+
+score <- abs(annotdf_f$prop_diff)*(-1*annotdf_f$avg_dist_cluster*annotdf_f$avg_dist_not_cluster)
+annotdf_f$score <- score
+
+
 table(annotdf_f$cluster)
 
 write.csv(annotdf_f, file = '../results/annotdf_f.csv')
@@ -235,6 +240,11 @@ annotdf_m['gene_j_med'] <- medj
 table(annotdf_m$cluster)
 
 annotdf_m <- annotdf_m[(annotdf_m$gene_j_symbol != 'Barcode'),]
+
+
+score <- abs(annotdf_m$prop_diff)*(-1*annotdf_m$avg_dist_cluster*annotdf_m$avg_dist_not_cluster)
+annotdf_m$score <- score
+
 
 write.csv(annotdf_m, file = '../results/annotdf_m.csv')
 ```

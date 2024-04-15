@@ -1,0 +1,82 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Reviewing the selected features in the collected array validation data.
+
+
+```{r}
+
+allpairs <- read_csv('../results/annotdf_f.csv')
+
+load('../results/results_no_array_min/female_validation_test_data.rda')
+
+load("../results/results_no_array_min/females_genepairs.rda")
+
+
+prop_pair_tab <- function(dat, allps, rowi, cl) {
+  
+  dat <- as.data.frame(dat)
+  ps <- allps[allps$cluster == cl,]
+  
+  genei <- as.character(ps[rowi,'gene_i_symbol'])
+  genej <- as.character(ps[rowi,'gene_j_symbol'])
+
+  print(paste0(genei, '  ', genej))
+  
+  idx <- which(dat$ClusterLabel == cl)
+  jdx <- which(dat$ClusterLabel != cl)
+
+  return(idx)
+  
+  xgenei <- dat[idx, genei]
+  xgenej <- dat[idx, genej]
+  ygenei <- dat[jdx, genei]
+  ygenej <- dat[jdx, genej]
+  
+  prop1 <- sum(xgenei > xgenej) / length(xgenej)
+  prop3 <- sum(ygenei > ygenej) / length(ygenej)
+
+  return( c(prop1, prop3, prop1-prop3) )
+}
+
+prop_pair_list <- function(dat, gps, pairi, cl) {
+  
+  dat <- as.data.frame(dat)
+  ps <- gps[[cl]]
+  
+  genei <- as.character(ps[pairi*2+1])
+  genej <- as.character(ps[pairi*2+2])
+
+  print(paste0(genei, '  ', genej))
+  
+  idx <- which(dat$ClusterLabel == cl)
+  jdx <- which(dat$ClusterLabel != cl)
+
+  xgenei <- dat[idx, genei]
+  xgenej <- dat[idx, genej]
+  ygenei <- dat[jdx, genei]
+  ygenej <- dat[jdx, genej]
+  
+  prop1 <- sum(xgenei > xgenej) / length(xgenej)
+  prop3 <- sum(ygenei > ygenej) / length(ygenej)
+
+  return( c(prop1, prop3, prop1-prop3) )
+}
+
+#prop_pair(tcga_train_dat, allpairs, 1, 'cluster3')
+
+prop_pair_list(tcga_train_dat, genepairs_cl, 0, 'cluster3')
+prop_pair_list(val_test_dat, genepairs_cl, 0, 'cluster3')
+
+cluslab <- 'cluster5'
+xs <- vector(length = 10)
+ys <- vector(length = 10)
+for (i in 0:10) {
+  xs[i] <- prop_pair_list(tcga_train_dat, genepairs, i, cluslab)[3]
+  ys[i] <- prop_pair_list(val_test_dat, genepairs, i, cluslab)[3]
+}
+plot(xs, ys, xlab='tcga', ylab = 'val arrays')
+```
+

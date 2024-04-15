@@ -89,7 +89,7 @@ val_f2$Survival <- as.numeric(val_f2$Survival) * 30.437
 val_f3 <- read_csv('../data/Array Data/jive_validation_13041_ex3_F_v2.csv.gz')
 val_f3$Censored <- val_f3$Censored-1
 
-load("../results/females_genepairs.rda")
+load("../results/results_no_array_min/females_genepairs.rda")
 lapply(genepairs, length)
 
 # "fix" a couple columns
@@ -119,6 +119,7 @@ gs <- c(unlist(unique(genepairs_cl)), "SampleID", "Sex", "Survival", "Censored")
 # combining the validation data
 val_dat <- rbind(val_f1[,gs], val_f2[,gs])
 val_dat <- rbind(val_dat, val_f3[,gs])
+#val_dat <- val_f2[,gs]
 
 # what if ...
 dat_f$ClusterLabel2 <- ifelse(dat_f$ClusterLabel == 'cluster3', yes = 'C3', no='notC3')
@@ -166,9 +167,8 @@ mod_f$predict(data_frame = val_dat,
 
 
 table(mod_f$results()$BestCall)
-## check results
-#cluster1 cluster2 cluster3 cluster4 cluster5 
-#      83        9       74       28      110 
+# rembrandt
+#      37       37        7       60 
       
 # get them reordered
 ### selected females in order of results
@@ -246,7 +246,7 @@ test the validation array annotations for accuracy!
 # test the validation array annotations for accuracy!
 
 
-load('../results/female_validation_test_data.rda')
+load('../results/results_no_array_min/female_validation_test_data.rda')
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
 # xgboost parameters to pass to each sub-classifier in the ensembles

@@ -69,13 +69,18 @@ shorter_plist <- function(pairlist, n) {
 Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 2)
 arr_f <- read_csv('../data/jive_training_array_data_F.csv.gz')
 tmp_f <- read_csv('../data/Tempus_Females_unstranded.csv.gz')
+
 load('../results/results_no_array_min/females_genepairs.rda')
+gset1 <- genepairs
+load('../results/females_genepairs.rda')
+gset2 <- genepairs
+
 tempus.clin <- read.csv('../data/TEMPUS_Clinical_Data.csv.gz')
 ```
 
 ```{r}
 
-gpairs <- shorter_plist(genepairs, 12)
+gpairs <- shorter_plist(gset1, 3)  # gset2 is NOT predictive!!
 
 tmp_f[['RNASE4']]  <- NULL # has 0 var
 
@@ -130,16 +135,16 @@ mod_f$train(data_frame=dat_f,
             params=params1
             )
 
-mod_f$train(data_frame=dat_f,
-            label_name='ClusterLabel2',
-            sample_id = 'Barcode',
-            drop_list = c('ClusterLabel'),
-            data_mode=c('pairs'),    # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
-            signatures=NULL,         # 
-            pair_list=c3_pairs,  # c3_pairs   # subset to these genes.
-            params=params1
-            )
-
+# mod_f$train(data_frame=dat_f,
+#             label_name='ClusterLabel2',
+#             sample_id = 'Barcode',
+#             drop_list = c('ClusterLabel'),
+#             data_mode=c('pairs'),    # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
+#             signatures=NULL,         # 
+#             pair_list=c3_pairs,  # c3_pairs   # subset to these genes.
+#             params=params1
+#             )
+# 
 
 # run the model
 mod_f$predict(data_frame = val_f, 
@@ -161,8 +166,8 @@ resdf <- cbind(pheno_reorg, mod_f$results())
 #resdf <- na.omit(resdf)
 resdf$Survival <- as.numeric(resdf$Survival)
 
-resdf$C3 <- unlist(resdf$C3)
-resdf$notC3 <- unlist(resdf$notC3)
+# resdf$C3 <- unlist(resdf$C3)
+# resdf$notC3 <- unlist(resdf$notC3)
 resdf$cluster1 <- unlist(resdf$cluster1)
 resdf$cluster2 <- unlist(resdf$cluster2)
 resdf$cluster3 <- unlist(resdf$cluster3)
@@ -177,10 +182,10 @@ ggsurvplot(modfit, pval = T)
 
 
 # scores for the samples called cluster3
-boxplot(as.numeric(resdf$cluster3)~as.factor(resdf$BestCalls))
+#boxplot(as.numeric(resdf$cluster3)~as.factor(resdf$BestCalls))
 
 
-boxplot(as.numeric(resdf$C3)~as.factor(resdf$BestCalls))
+#boxplot(as.numeric(resdf$C3)~as.factor(resdf$BestCalls))
 
 ```
 
