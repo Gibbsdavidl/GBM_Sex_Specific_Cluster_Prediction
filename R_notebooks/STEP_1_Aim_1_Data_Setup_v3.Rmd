@@ -302,15 +302,16 @@ all(clinsub$case_submitter_id[cidx] == rownames(rna_agg_df_tumor))
 
 rna_agg_df_tumor$CaseID <- clinsub$case_submitter_id[cidx]
 rna_agg_df_tumor$Sex <- clinsub$gender[cidx]
-rna_agg_df_tumor$Survival <- clinsub$days_to_death[cidx]
+#rna_agg_df_tumor$Survival <- clinsub$days_to_death[cidx]
+rna_agg_df_tumor$Survival <- clinsub$days_to_last_known_disease_status
 rna_agg_df_tumor$Censored <- clinsub$vital_status[cidx]
 
 #write.csv(rna_agg_df_tumor,'../data/cptac3_gbm_full_rnaseq_table.csv',quote = F,row.names = F)
 
 rna_f <- rna_agg_df_tumor[rna_agg_df_tumor$Sex == 'female',]
 rna_m <- rna_agg_df_tumor[rna_agg_df_tumor$Sex == 'male',]
-write.csv(rna_f,'../data/cptac3_gbm_rnaseq_table_unstranded_Female.csv',quote = F,row.names = F)
-write.csv(rna_m,'../data/cptac3_gbm_rnaseq_table_unstranded_Male.csv',quote = F,row.names = F)
+write.csv(rna_f,'../data/cptac3_gbm_rnaseq_table_unstranded_Female.csv.gz', quote = F,row.names = F)
+write.csv(rna_m,'../data/cptac3_gbm_rnaseq_table_unstranded_Male.csv.gz', quote = F,row.names = F)
 
 write.csv(biodf, '../data/cptac3_biospecimen_unstranded_table.csv')
 

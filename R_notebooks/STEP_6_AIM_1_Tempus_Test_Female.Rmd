@@ -72,15 +72,20 @@ tmp_f <- read_csv('../data/Tempus_Females_unstranded.csv.gz')
 
 load('../results/results_no_array_min/females_genepairs.rda')
 gset1 <- genepairs
-load('../results/females_genepairs.rda')
+
+load('../results/females_genepairs_val.rda')
 gset2 <- genepairs
+
+load('../results/females_genepairs_rna.rda')
+gset3 <- genepairs
+
 
 tempus.clin <- read.csv('../data/TEMPUS_Clinical_Data.csv.gz')
 ```
 
 ```{r}
 
-gpairs <- shorter_plist(gset1, 3)  # gset2 is NOT predictive!!
+gpairs <- shorter_plist(gset3, 12)  
 
 tmp_f[['RNASE4']]  <- NULL # has 0 var
 
@@ -108,14 +113,14 @@ c3_pairs[['notC3']] <- c(genepairs_cl$cluster1, genepairs_cl$cluster2, genepairs
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
 # xgboost parameters to pass to each sub-classifier in the ensembles
-params1 <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
-               eta=0.45,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
+params1 <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+               eta=0.3,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
                nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
                early_stopping_rounds=2,
                nthreads=8,     # parallel threads
-               gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
+               gamma=1.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
                lambda=2.5,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
-               alpha=0.25,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+               alpha=1.2,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
                verbose=0,
                train_perc=0.8,
                combine_function='median',
@@ -135,16 +140,6 @@ mod_f$train(data_frame=dat_f,
             params=params1
             )
 
-# mod_f$train(data_frame=dat_f,
-#             label_name='ClusterLabel2',
-#             sample_id = 'Barcode',
-#             drop_list = c('ClusterLabel'),
-#             data_mode=c('pairs'),    # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
-#             signatures=NULL,         # 
-#             pair_list=c3_pairs,  # c3_pairs   # subset to these genes.
-#             params=params1
-#             )
-# 
 
 # run the model
 mod_f$predict(data_frame = val_f, 
@@ -166,8 +161,8 @@ resdf <- cbind(pheno_reorg, mod_f$results())
 #resdf <- na.omit(resdf)
 resdf$Survival <- as.numeric(resdf$Survival)
 
-# resdf$C3 <- unlist(resdf$C3)
-# resdf$notC3 <- unlist(resdf$notC3)
+resdf$C3 <- unlist(resdf$C3)
+resdf$notC3 <- unlist(resdf$notC3)
 resdf$cluster1 <- unlist(resdf$cluster1)
 resdf$cluster2 <- unlist(resdf$cluster2)
 resdf$cluster3 <- unlist(resdf$cluster3)
@@ -178,8 +173,11 @@ resdf$cluster5 <- unlist(resdf$cluster5)
 resdf$CensoredCode <- ifelse(resdf$Censored == 'alive', yes=1, no=2)
 
 modfit <- survfit(Surv(Survival, CensoredCode)~BestCalls,data=resdf)
-ggsurvplot(modfit, pval = T)
+ggsurvplot(modfit, pval = T, xlim=c(0,1700))
 
+surp <- ggsurvplot(modfit, pval = T, xlim=c(0,1700) )
+surp
+ggsave("../figures/survplot_tempus_refined_features_F.pdf", surp$plot, height = 5, width = 10)
 
 # scores for the samples called cluster3
 #boxplot(as.numeric(resdf$cluster3)~as.factor(resdf$BestCalls))

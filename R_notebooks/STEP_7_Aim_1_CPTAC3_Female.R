@@ -43,33 +43,41 @@ shorter_plist <- function(pairlist, n) {
 # read in the data
 Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 2)
 #arr_f <- read_csv('../data/jive_training_array_data_F.csv.gz')
-#cpt_f <- read_csv('../data/cptac3_gbm_rnaseq_table_unstranded_Female.csv')
+#cpt_f <- read_csv('../data/cptac3_gbm_rnaseq_table_unstranded_Female.csv.gz')
+#load('../data/tcga_array_data_F.rda')
+#arr_f <- dat_f
 
-load('../results/results_no_array_min/females_genepairs.rda')
-gset1 <- genepairs
+#load('../results/results_no_array_min/females_genepairs.rda')
+#gset1 <- genepairs
 
-load('../results/females_genepairs.rda')
-gset2 <- genepairs
+#load('../results/females_genepairs_val.rda')
+#gset2 <- genepairs
+
+#load('../results/females_genepairs_rna.rda')
+#gset3 <- genepairs
 
 # make sure the gene pairs are all present
-gpairs <- shorter_plist(gset1, 12)  # gset2 is NOT predictive!!
+gpairs <- shorter_plist(gset3, 4)  # gset2 is NOT predictive!!
 
 # check they're present in the data
 lapply(gpairs, function(x) x[! (x %in% colnames(arr_f ))] )
 lapply(gpairs, function(x) x[! (x %in% colnames(cpt_f))] ) # missing "FABP5"  "CD24"   "LGALS3"
 
 # clean the pairs
-genepairs_cl <- clean_genepairs_list(gpairs, cpt_f)  # only one with missing genes
+genepairs_cl <- clean_genepairs_list(gpairs, cpt_f) # only one with missing genes
 
 gs1 <- c(unlist(unique(genepairs_cl)), "Barcode", "ClusterLabel")
 gs2 <- c(unlist(unique(genepairs_cl)), "CaseID", "Survival", "Censored")
 
+
 dat_f <- arr_f[,gs1]
 val_f <- cpt_f[,gs2]
 
+
 # "fix" the overall survival in days, paitents still alive are listed as "--"
 val_f_surv <- as.numeric(val_f$Survival)
-val_f_surv[is.na(val_f_surv)] <- max(val_f_surv, na.rm = T) + 100
+val_f <- val_f[val_f_surv > 10,]
+val_f_surv <- as.numeric(val_f$Survival)
 val_f$Survival <- val_f_surv
 
 # what if ...
@@ -81,14 +89,14 @@ c3_pairs[['notC3']] <- c(genepairs_cl$cluster1, genepairs_cl$cluster2, genepairs
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
 # xgboost parameters to pass to each sub-classifier in the ensembles
-params1 <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
-                eta=0.45,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
+params1 <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+                eta=0.3,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
                 nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
                 early_stopping_rounds=2,
                 nthreads=8,     # parallel threads
-                gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
+                gamma=1.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
                 lambda=2.5,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
-                alpha=0.25,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+                alpha=1.2,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
                 verbose=0,
                 train_perc=0.8,
                 combine_function='median',
@@ -96,28 +104,29 @@ params1 <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I
 )
 
 
+
 mod_f <- robencla::Robencla$new('f_model')
 
-mod_f$train(data_frame=dat_f,
-            label_name='ClusterLabel', #'ClusterLabel2',
-            sample_id = 'Barcode',
-            drop_list = c(),
-            data_mode=c('pairs'),    # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
-            signatures=NULL,         #
-            pair_list=genepairs_cl,  # c3_pairs   # subset to these genes.
-            params=params1
-)
-
-
 # mod_f$train(data_frame=dat_f,
-#             label_name='ClusterLabel2',
+#             label_name='ClusterLabel', #'ClusterLabel2',
 #             sample_id = 'Barcode',
-#             drop_list = c('ClusterLabel'),
+#             drop_list = c(),
 #             data_mode=c('pairs'),    # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
 #             signatures=NULL,         #
-#             pair_list=c3_pairs,  # c3_pairs   # subset to these genes.
+#             pair_list=genepairs_cl,  # c3_pairs   # subset to these genes.
 #             params=params1
 # )
+
+
+mod_f$train(data_frame=dat_f,
+            label_name='ClusterLabel',
+            sample_id = 'Barcode',
+            drop_list = c('ClusterLabel2'),
+            data_mode=c('pairs'),    # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
+            signatures=NULL,         #
+            pair_list=genepairs_cl,  #    # subset to these genes.
+            params=params1
+)
 
 
 # run the model
@@ -141,20 +150,22 @@ resdf <- cbind(pheno_reorg, mod_f$results())
 #resdf <- na.omit(resdf)
 resdf$Survival <- as.numeric(resdf$Survival)
 
-# resdf$C3 <- unlist(resdf$C3)
-# resdf$notC3 <- unlist(resdf$notC3)
+#resdf$C3 <- unlist(resdf$C3)
+#resdf$notC3 <- unlist(resdf$notC3)
 resdf$cluster1 <- unlist(resdf$cluster1)
 resdf$cluster2 <- unlist(resdf$cluster2)
 resdf$cluster3 <- unlist(resdf$cluster3)
 resdf$cluster4 <- unlist(resdf$cluster4)
 resdf$cluster5 <- unlist(resdf$cluster5)
 
-
-resdf$CensoredCode <- ifelse(resdf$Censored == 'Alive', yes=1, no=2)
+resdf$CensoredCode <- ifelse(resdf$Censored == 'Alive', yes=0, no=1)
 
 modfit <- survfit(Surv(Survival, CensoredCode)~BestCalls,data=resdf)
 ggsurvplot(modfit, pval = T)
 
+surp <- ggsurvplot(modfit, pval = T, xlim=c(0,1700) )
+surp
+ggsave("../figures/survplot_cptac3_4pairs_refined_features_F.pdf", surp$plot, height = 5, width = 10)
 
 # scores for the samples called cluster3
 #boxplot(as.numeric(resdf$cluster3)~as.factor(resdf$BestCalls))
