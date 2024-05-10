@@ -44,8 +44,9 @@ shorter_plist <- function(pairlist, n) {
 Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 2)
 #arr_f <- read_csv('../data/jive_training_array_data_F.csv.gz')
 #cpt_f <- read_csv('../data/cptac3_gbm_rnaseq_table_unstranded_Female.csv.gz')
-#load('../data/tcga_array_data_F.rda')
-#arr_f <- dat_f
+load('../data/tcga_array_data_F.rda')
+arr_f <- dat_f
+cpt_f <- cptac3.rnaseq.f
 
 #load('../results/results_no_array_min/females_genepairs.rda')
 #gset1 <- genepairs
@@ -53,8 +54,8 @@ Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 2)
 #load('../results/females_genepairs_val.rda')
 #gset2 <- genepairs
 
-#load('../results/females_genepairs_rna.rda')
-#gset3 <- genepairs
+load('../results/females_genepairs_rna.rda')
+gset3 <- genepairs
 
 # make sure the gene pairs are all present
 gpairs <- shorter_plist(gset3, 4)  # gset2 is NOT predictive!!
@@ -67,17 +68,16 @@ lapply(gpairs, function(x) x[! (x %in% colnames(cpt_f))] ) # missing "FABP5"  "C
 genepairs_cl <- clean_genepairs_list(gpairs, cpt_f) # only one with missing genes
 
 gs1 <- c(unlist(unique(genepairs_cl)), "Barcode", "ClusterLabel")
-gs2 <- c(unlist(unique(genepairs_cl)), "CaseID", "Survival", "Censored")
-
+gs2 <- c(unlist(unique(genepairs_cl)), "sample", "demo__days_to_death", "demo__vital_status", "demo__gender")
 
 dat_f <- arr_f[,gs1]
 val_f <- cpt_f[,gs2]
 
 
 # "fix" the overall survival in days, paitents still alive are listed as "--"
-val_f_surv <- as.numeric(val_f$Survival)
-val_f <- val_f[val_f_surv > 10,]
-val_f_surv <- as.numeric(val_f$Survival)
+val_f_surv <- as.numeric(val_f$demo__days_to_death)
+#val_f <- val_f[val_f_surv > 10,]
+#val_f_surv <- as.numeric(val_f$Survival)
 val_f$Survival <- val_f_surv
 
 # what if ...
@@ -107,21 +107,11 @@ params1 <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I 
 
 mod_f <- robencla::Robencla$new('f_model')
 
-# mod_f$train(data_frame=dat_f,
-#             label_name='ClusterLabel', #'ClusterLabel2',
-#             sample_id = 'Barcode',
-#             drop_list = c(),
-#             data_mode=c('pairs'),    # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
-#             signatures=NULL,         #
-#             pair_list=genepairs_cl,  # c3_pairs   # subset to these genes.
-#             params=params1
-# )
-
 
 mod_f$train(data_frame=dat_f,
             label_name='ClusterLabel',
             sample_id = 'Barcode',
-            drop_list = c('ClusterLabel2'),
+            drop_list = c(), #c('ClusterLabel2'),
             data_mode=c('pairs'),    # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
             signatures=NULL,         #
             pair_list=genepairs_cl,  #    # subset to these genes.
@@ -131,10 +121,10 @@ mod_f$train(data_frame=dat_f,
 
 # run the model
 mod_f$predict(data_frame = val_f, 
-              sample_id = 'CaseID',
-              drop_list = c('Survival', 'Censored'))
+              sample_id = 'sample',
+              drop_list = c())
 
-
+#"sample", "demo__days_to_death", "demo__vital_status", "demo__gender"
 
 # check the predictions
 table(mod_f$results()$BestCall)
@@ -142,13 +132,14 @@ table(mod_f$results()$BestCall)
 head(mod_f$results())
 
 # reorder the tables
-rownames(val_f) <- val_f$CaseID
-pheno_reorg <- val_f[mod_f$results()$SampleIDs, c("CaseID","Survival","Censored")]
+val_f <- as.data.frame(val_f)
+rownames(val_f) <- val_f$sample
+pheno_reorg <- val_f[mod_f$results()$SampleIDs, c("sample", "demo__days_to_death", "demo__vital_status", "demo__gender")]
 
 # now bind in the results to the phenotype data
 resdf <- cbind(pheno_reorg, mod_f$results())
 #resdf <- na.omit(resdf)
-resdf$Survival <- as.numeric(resdf$Survival)
+resdf$Survival <- as.numeric(resdf$demo__days_to_death)
 
 #resdf$C3 <- unlist(resdf$C3)
 #resdf$notC3 <- unlist(resdf$notC3)
@@ -158,7 +149,7 @@ resdf$cluster3 <- unlist(resdf$cluster3)
 resdf$cluster4 <- unlist(resdf$cluster4)
 resdf$cluster5 <- unlist(resdf$cluster5)
 
-resdf$CensoredCode <- ifelse(resdf$Censored == 'Alive', yes=0, no=1)
+resdf$CensoredCode <- ifelse(resdf$demo__vital_status == 'Alive', yes=1, no=2)
 
 modfit <- survfit(Surv(Survival, CensoredCode)~BestCalls,data=resdf)
 ggsurvplot(modfit, pval = T)

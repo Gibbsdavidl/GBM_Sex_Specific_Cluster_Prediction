@@ -211,111 +211,84 @@ write.csv(tempus_female2,"../data/Tempus_Females_unstranded.csv",row.names=F)
 NOW for adding CPTAC3!
 
 ```{r}
+cptac_query <- "
+  SELECT
+    gexp.case_gdc_id, gexp.gene_name, clin.submitter_id,
+    clin.demo__gender, clin.demo__vital_status, clin.demo__days_to_death,
+    clin.diag__days_to_last_known_disease_status,
+    clin.diag__primary_diagnosis, clin.diag__age_at_diagnosis,
+    clin.demo__race, clin.demo__ethnicity,
+    AVG( LOG10(gexp.unstranded+1 ) ) as gene_exp
 
-# the sample sheet that links file id to case id
-samples <- read_tsv('C:/Users/daveg/Desktop/cptac3-gbm/rnaseq/gdc_sample_sheet.2024-04-12.tsv')
+    FROM isb-cgc-bq.CPTAC.RNAseq_hg38_gdc_current as gexp
+    JOIN isb-cgc-bq.CPTAC.clinical_gdc_current as clin
+    ON gexp.case_gdc_id = case_id
+   
+    WHERE gexp.sample_type_name = 'Primary Tumor'
+        AND gene_type = 'protein_coding'
+        AND gexp.primary_site = 'Brain'
 
-biospecimen <- read_tsv('C:/Users/daveg/Desktop/cptac3-gbm/biospecimen.cohort.2024-04-12 (1)/sample.tsv')
+    GROUP BY
+    gexp.case_gdc_id, gene_name, clin.submitter_id, clin.demo__gender,
+    clin.diag__age_at_diagnosis, demo__race, clin.demo__ethnicity,
+    clin.demo__vital_status, clin.submitter_id, clin.diag__primary_diagnosis,
+    clin.demo__days_to_death, clin.diag__days_to_last_follow_up,clin.exp__created_datetime,
+    clin.lost_to_followup,clin.diag__days_to_last_known_disease_status"
 
-clinical <- read_tsv('C:/Users/daveg/Desktop/cptac3-gbm/clinical.cohort.2024-04-12 (1)/clinical.tsv')
+cptac3.import <- bq_project_query('gbm-gender', query = cptac_query) #Put data in temporary BQ table
 
-# gather all the downloaded RNA-seq count files.
-rnafiles <- list.files('C:/Users/daveg/Desktop/cptac3-gbm/rnaseq/',pattern = 'gene_counts.tsv',full.names = T,recursive = T)
-rnafiles <- rnafiles[ !str_detect(rnafiles, pattern = 'parcel') ]
+cptac3_dwnld <- bq_table_download(cptac3.import) #Put data into a dataframe
 
-# these are the column names of each RNA-seq file
-cnames <- c('gene_id',	'gene_name',	'gene_type',	'unstranded',	'stranded_first',	
-  'stranded_second',	'tpm_unstranded',	'fpkm_unstranded', 'fpkm_uq_unstranded')
+write.table(cptac3_dwnld, file = '../data/cptac3_rnaseq_dwnld.csv', quote = F, row.names = F, sep = ',')
 
-rnalist <- list()
-caselist <- list()
-samplelist <- list()
-i <- 1
+cptac3.rnaseq.data <- cptac3_dwnld %>% 
+     pivot_wider(id_cols = submitter_id, names_from = gene_name, values_from = gene_exp) %>% rename(sample = submitter_id)
+```
+```{r}
+### Preprocessing RNA-seq data
+### remove columns of all zeros
+idx <- which( apply( as.matrix(cptac3.rnaseq.data[,2:ncol(cptac3.rnaseq.data)]), 2, sum, na.rm=TRUE) > 0 )
+cptac3.rnaseq.data <- cptac3.rnaseq.data[, c(1, idx+1)]
 
-for (fi in rnafiles) {
-
-  bits <- str_split(fi, pattern = '\\.')[[1]]
-  id <- str_split(bits[1], pattern = '\\/')[[1]][7]
-  
-  # read in the counts and filter to just protein coding genes
-  cnts <- read_tsv(fi,skip = 6,col_names = cnames)
-  cnts <- cnts %>% dplyr::filter(gene_type == 'protein_coding')
-  
-  caselist[[i]] <- samples$`Case ID`[samples$`File ID` == id]
-  samplelist[[i]] <- samples$`Sample ID`[samples$`File ID` == id]
-  
-  #qplot(cnts$unstranded, cnts$tpm_unstranded, ylim=c(0,20000),xlim=c(0,20000))
-  #cor(cnts$unstranded, cnts$tpm_unstranded, method = 'spearman')
-  #[1] 0.9470363
-
-  newdf <- data.frame(cnts$unstranded,row.names = cnts$gene_id)  # was tpm_unstranded
-  rnalist[[i]] <- newdf 
-  
-  i <- i+1
-}
-
-# bind the expression profiles and transpose it
-rnadf <- do.call('cbind', rnalist)
-
-# get the unique case IDs some profiles are from multiple samples, but same case ID
-caselistuniq <- sapply(unlist(caselist), function(a) unique(str_squish(str_split(a,',')[[1]])))
-
-# get the sample IDs out
-samplelistuniq <- as.character(
-  unlist( 
-    sapply(unlist(samplelist), function(a) unique(str_squish(str_split(a,',')[[1]]))) ) )
-
-# annotate the rows and columns
-colnames(rnadf) <- caselistuniq
-rnadf$Symbol <- cnts$gene_name
-
-# observe the duplicated symbols
-# most have all zeros for one entry and are tied to Y chromosome expr
-didx <- which(duplicated(rnadf$Symbol))
-
-# sum the repeated genes
-rnadf_agg <- aggregate(.~Symbol,data=rnadf,FUN=sum) 
-
-# transpose 
-rnadf_agg_t <- as.data.frame(t(rnadf_agg[,-1]))
-colnames(rnadf_agg_t) <- rnadf_agg$Symbol
+### remove columns with zero variance
+jdx <- which( apply(as.matrix(cptac3.rnaseq.data[,2:ncol(cptac3.rnaseq.data)]), 2, var, na.rm=TRUE) > 0 )
+cptac3.rnaseq.data <- cptac3.rnaseq.data[, c(1,jdx+1)]
+```
 
 
+```{r}
 
-this_biospecimen <- biospecimen[biospecimen$sample_submitter_id %in% samplelistuniq,]
+cptac3_pheno_full <- unique(cptac3_dwnld[,c('case_gdc_id','submitter_id',
+                                       'demo__gender','demo__vital_status',
+                                       'demo__days_to_death',
+                                       'diag__days_to_last_known_disease_status',
+                                       'diag__primary_diagnosis',
+                                       'diag__age_at_diagnosis','demo__race',
+                                       'demo__ethnicity')])
 
-#There are two normal samples "C3N-01197" and "C3N-03452"
-which(rownames(rnadf_agg_t) %in% c("C3N-01197", "C3N-03452"))
-# 53 73
 
-rna_agg_df_tumor <- rnadf_agg_t[!(rownames(rnadf_agg_t) %in% c("C3N-01197", "C3N-03452")), ]
+cptac3_pheno <- unique(cptac3_dwnld[,c('submitter_id',
+                                       'demo__gender','demo__vital_status',
+                                       'demo__days_to_death')])
+
+cptac3_pheno_f <- cptac3_pheno %>% filter(demo__gender == 'female')
+cptac3_pheno_m <- cptac3_pheno %>% filter(demo__gender == 'male')
 
 
-biodf <- biospecimen[biospecimen$sample_submitter_id %in% samplelistuniq,]
-biodf[biodf$sample_type == 'Primary Tumor',]
-
-clinsub <- clinical[clinical$case_submitter_id %in% rownames(rna_agg_df_tumor), ]
-cidx <- match( rownames(rna_agg_df_tumor), clinsub$case_submitter_id )
-
-all(clinsub$case_submitter_id[cidx] == rownames(rna_agg_df_tumor))
-# True
-
-rna_agg_df_tumor$CaseID <- clinsub$case_submitter_id[cidx]
-rna_agg_df_tumor$Sex <- clinsub$gender[cidx]
-#rna_agg_df_tumor$Survival <- clinsub$days_to_death[cidx]
-rna_agg_df_tumor$Survival <- clinsub$days_to_last_known_disease_status
-rna_agg_df_tumor$Censored <- clinsub$vital_status[cidx]
-
-#write.csv(rna_agg_df_tumor,'../data/cptac3_gbm_full_rnaseq_table.csv',quote = F,row.names = F)
-
-rna_f <- rna_agg_df_tumor[rna_agg_df_tumor$Sex == 'female',]
-rna_m <- rna_agg_df_tumor[rna_agg_df_tumor$Sex == 'male',]
-write.csv(rna_f,'../data/cptac3_gbm_rnaseq_table_unstranded_Female.csv.gz', quote = F,row.names = F)
-write.csv(rna_m,'../data/cptac3_gbm_rnaseq_table_unstranded_Male.csv.gz', quote = F,row.names = F)
-
-write.csv(biodf, '../data/cptac3_biospecimen_unstranded_table.csv')
+cptac3.rnaseq.m <- cptac3.rnaseq.data %>% inner_join(. , cptac3_pheno_m, by = c("sample" = "submitter_id"))
+cptac3.rnaseq.f <- cptac3.rnaseq.data %>% inner_join(. , cptac3_pheno_f, by = c("sample" = "submitter_id"))
 
 ```
+
+
+```{r}
+write.csv(cptac3.rnaseq.m,"../data/CPTAC3_Males_RNASeq_Data_unstranded.csv",row.names=F)
+write.csv(cptac3.rnaseq.f,"../data/CPTAC3_Females_RNASeq_Data_unstranded.csv",row.names=F)
+```
+
+
+
+
 
 
 
