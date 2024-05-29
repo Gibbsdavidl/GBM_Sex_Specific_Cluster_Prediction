@@ -269,7 +269,7 @@ cptac3_pheno_full <- unique(cptac3_dwnld[,c('case_gdc_id','submitter_id',
 
 cptac3_pheno <- unique(cptac3_dwnld[,c('submitter_id',
                                        'demo__gender','demo__vital_status',
-                                       'demo__days_to_death')])
+                                       'diag__days_to_last_known_disease_status')])
 
 cptac3_pheno_f <- cptac3_pheno %>% filter(demo__gender == 'female')
 cptac3_pheno_m <- cptac3_pheno %>% filter(demo__gender == 'male')
@@ -277,6 +277,7 @@ cptac3_pheno_m <- cptac3_pheno %>% filter(demo__gender == 'male')
 
 cptac3.rnaseq.m <- cptac3.rnaseq.data %>% inner_join(. , cptac3_pheno_m, by = c("sample" = "submitter_id"))
 cptac3.rnaseq.f <- cptac3.rnaseq.data %>% inner_join(. , cptac3_pheno_f, by = c("sample" = "submitter_id"))
+
 
 ```
 
@@ -290,11 +291,32 @@ write.csv(cptac3.rnaseq.f,"../data/CPTAC3_Females_RNASeq_Data_unstranded.csv",ro
 
 
 
-
+Processing the data for fast loading and use
 
 ```{r}
-# DONE
-# Then data sets were compressed with gzip
+
+# TCGA array data
+colnames(dat_f)[12645:12647] # "Barcode"      "ClusterLabel" "Sex"       
+
+# TCGA rna-seq data
+colnames(tcga_f)[1] <- 'Barcode'
+colnames(tcga_f)[19428:19429] <- c('ClusterLabel', 'SampleBarcode')  #"cluster.group" "value" 
+
+# Validation array data sets
+colnames(val_f)[11916:11919] <- c('Barcode','Sex','Survival', 'Censored') # "SampleID" "Sex"      "Survival" "Censored"
+
+# Tempus rna-seq data
+colnames(tmp_f)[19939:19940] <- c('Censored','Survival')
+colnames(tmp_f)[1] <- 'Barcode'
+
+# CPTAC3 rna-seq data
+cpt_f <- cptac3.rnaseq.f
+colnames(cpt_f)[1] <- 'Barcode'
+colnames(cpt_f[19452:19454]) <- c('Sex','Censored','Survival')
+ # "demo__gender"                            "demo__vital_status"                      "diag__days_to_last_known_disease_status"
+
+save(dat_f, tcga_f, val_f, tmp_f, cpt_f, file='../data/F_processed_data.rda')
+
 ```
 
 

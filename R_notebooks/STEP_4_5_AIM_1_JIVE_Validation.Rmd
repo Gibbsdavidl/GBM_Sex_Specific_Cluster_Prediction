@@ -369,7 +369,7 @@ sigs_m_cl <- clean_genepairs_list(sigs_m_cl, val_m1)  # only one with missing ge
 sigs_m_cl <- lapply(sigs_m_cl, function(a) as.character(na.omit(a)))
 lapply(sigs_m_cl, function(x) x[! (x %in% colnames(dat_m))] )
 
-gpairs <- shorter_plist(genepairs, 24)
+gpairs <- shorter_plist(gp2, 24)
 
 lapply(gpairs, function(x) x[! (x %in% colnames(dat_m))] )
 lapply(gpairs, function(x) x[! (x %in% colnames(val_m1))] ) # missing "ZNF710-AS1" in C4 and "NEFL" in C5
@@ -528,7 +528,16 @@ test the validation array annotations for accuracy!
 # test the validation array annotations for accuracy!
 
 
-load('../results/male_validation_test_data.rda')
+load('../results/results_no_array_min/male_validation_test_data.rda')
+
+
+sigs_m_cl <- clean_genepairs_list(genepairs_cl, dat_m)  # only one with missing genes
+sigs_m_cl <- clean_genepairs_list(sigs_m_cl, val_m1)  # only one with missing genes
+sigs_m_cl <- lapply(sigs_m_cl, function(a) as.character(na.omit(a)))
+lapply(sigs_m_cl, function(x) x[! (x %in% colnames(dat_m))] )
+
+gpairs <- shorter_plist(gp2, 24)
+
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
 # xgboost parameters to pass to each sub-classifier in the ensembles
