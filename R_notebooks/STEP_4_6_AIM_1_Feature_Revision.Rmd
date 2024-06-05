@@ -108,17 +108,13 @@ save(val_f, file = '../data/joined_validation_array_data_F.rda')
 
 
 ```{r}
-load('data/joined_validation_array_data_F.rda')
-load('data/tcga_array_data_F.rda')
 
-load('data/rnaseq_tcga_F.rdaz')
+load('../data/F_processed_data.rda')
 
-load('../results/results_median_min/females_genepairs.rda')
-gp1 <- genepairs
-load('../results/females_genepairs_val.rda')
-gp2 <- genepairs
-load('../results/females_genepairs_rna.rda')
-gp3 <- genepairs
+load('../data/f_genepairs.rda')
+
+rclin <- read.csv('../data/Array Data/validation_array_resources/GSE108475_REMBRANDT_clinical.data.csv')
+
 resdf <- read_csv('../results/annotdf_f.csv.gz')
 
 
@@ -126,6 +122,8 @@ resdf <- read_csv('../results/annotdf_f.csv.gz')
 
 
 ```{r}
+
+genepairs <- fgenepairs$rna
 
 gpairs <- shorter_plist(genepairs, 12)
 
@@ -155,7 +153,6 @@ mod_f <- robencla::Robencla$new('f_model')
 mod_f$train(data_frame=dat_f,
             label_name='ClusterLabel', #'ClusterLabel2',
             sample_id = 'Barcode',
-            drop_list = c('Sex'),
             data_mode=c('pairs'),    # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
             signatures=NULL,         # 
             pair_list=genepairs_cl,  # c3_pairs   # subset to these genes.
@@ -165,13 +162,49 @@ mod_f$train(data_frame=dat_f,
 
 # run the model
 mod_f$predict(data_frame = val_f, 
-              sample_id = 'SampleID',
-              drop_list = c('Sex'))
+              sample_id = 'Barcode'
+              )
 
 
-# assign the predicted cluster label
-val_dat <- mod_f$test_data
-val_dat$ClusterLabel <- mod_f$results()$BestCall
+# get the results table
+resdf <- mod_f$results()
+
+# add in the survival and censored
+resdf$Survival <- mod_f$test_data$Survival
+resdf$Censored <- mod_f$test_data$Censored
+
+# convert scores to numerics
+resdf$cluster1 <- unlist(resdf$cluster1)
+resdf$cluster2 <- unlist(resdf$cluster2)
+resdf$cluster3 <- unlist(resdf$cluster3)
+resdf$cluster4 <- unlist(resdf$cluster4)
+resdf$cluster5 <- unlist(resdf$cluster5)
+
+
+head(resdf)
+
+df <- inner_join(resdf, rclin, join_by('SampleIDs'=='SUBJECT_ID'))
+
+
+table(df$BestCalls, df$DISEASE_TYPE)
+
+
+
+
+resdf$CensoredCode <- ifelse(resdf$Censored == 0, yes=1, no=2)
+
+modfit <- survfit(Surv(Survival, CensoredCode)~BestCalls,data=resdf)
+
+ggsurvplot(modfit, pval = T, xlim=c(0,1700))
+
+write.csv(resdf, file='../results/F_validation_predictions_using_rna_pairs.csv')
+
+  #          ASTROCYTOMA GBM MIXED OLIGODENDROGLIOMA UNKNOWN
+  # cluster1           3  16     0                 0       6
+  # cluster2           0   3     0                 0       1
+  # cluster3          21   4     3                18       7
+  # cluster4           8  14     0                 2       1
+  # cluster5           5  21     1                 3       4
 
 ```
 
@@ -795,6 +828,13 @@ i <- i+1
 
 
  MEN
+ MEN
+ MEN
+ MEN
+ MEN
+ MEN
+ MEN
+ MEN
 
 
 
@@ -863,6 +903,8 @@ val_m <- rbind(val_m, val_m3[,gene_int_val])
 
 save(val_m, file='../data/joined_validation_array_data_M.rda')
 
+rclin <- read.csv('../data/Array Data/validation_array_resources/GSE108475_REMBRANDT_clinical.data.csv')
+
 ```
 
 
@@ -870,16 +912,20 @@ save(val_m, file='../data/joined_validation_array_data_M.rda')
 
 ```{r}
 
+load('../data/M_processed_data.rda')
+load('../data/m_genepairs.rda')
+rclin <- read.csv('../data/Array Data/validation_array_resources/GSE108475_REMBRANDT_clinical.data.csv')
 
-gpairs <- shorter_plist(genepairs, 12)
+genepairs <- m_genepairs$val
+gpairs <- shorter_plist(genepairs, 24)
 
 # clean the pairs
 genepairs_cl <- clean_genepairs_list(gpairs, val_m)  # only one with missing genes
 
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
-params1 <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
-               eta=0.45,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
+params1 <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+               eta=0.3,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
                nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
                early_stopping_rounds=2,
                nthreads=8,     # parallel threads
@@ -909,13 +955,45 @@ mod_m$train(data_frame=dat_m,
 
 # run the model
 mod_m$predict(data_frame = val_m, 
-              sample_id = 'SampleID',
-              drop_list = c('Sex'))
+              sample_id = 'Barcode')
 
 
-# assign the predicted cluster label
-val_dat <- mod_m$test_data
-val_dat$ClusterLabel <- mod_m$results()$BestCall
+# get the results table
+resdf <- mod_m$results()
+
+# add in the survival and censored
+resdf$Survival <- mod_m$test_data$Survival
+resdf$Censored <- mod_m$test_data$Censored
+
+# convert scores to numerics
+resdf$cluster1 <- unlist(resdf$cluster1)
+resdf$cluster2 <- unlist(resdf$cluster2)
+resdf$cluster3 <- unlist(resdf$cluster3)
+resdf$cluster4 <- unlist(resdf$cluster4)
+resdf$cluster5 <- unlist(resdf$cluster5)
+
+head(resdf)
+
+df <- inner_join(resdf, rclin, join_by('SampleIDs'=='SUBJECT_ID'))
+
+table(df$BestCalls, df$DISEASE_TYPE)
+
+
+
+
+resdf$CensoredCode <- ifelse(resdf$Censored == 0, yes=1, no=2)
+
+modfit <- survfit(Surv(Survival, CensoredCode)~BestCalls,data=resdf)
+
+ggsurvplot(modfit, pval = T, xlim=c(0,1700))
+
+
+
+
+write.csv(resdf, file='../results/M_validation_predictions_using_rna_pairs.csv')
+
+
+
 
 ```
 
@@ -1122,9 +1200,224 @@ save(genepairs, res0, file='../results/males_genepairs_val.rda')
 ```
 
 
+
+RNA 
+
 ```{r}
 
-#load('../results/females_genepairs_val.rda')
+load('../data/M_processed_data.rda')
+
+resdf <- read_csv(file='../results/annotdf_m_valdiff.csv.gz')
+
+rna_prop_diff <- vector(mode = 'numeric', length=nrow(resdf))
+
+last_label <- "asdf"
+
+for (rowi in 1:nrow(resdf)) {
+  
+  if(rowi %% 1000 == 0){
+    print(rowi)
+  }
+
+  this_label <- as.character(resdf$cluster[rowi])
+
+  if (this_label != last_label) {
+    #  index into this cluster
+    idx <- rna_m$ClusterLabel == this_label
+    jdx <- rna_m$ClusterLabel != this_label
+    
+    # data labeled as THIS cluster
+    labdat <- as.data.table(rna_m[idx,])
+    # data labels as NOT THIS cluster
+    notdat <- as.data.table(rna_m[jdx,])
+
+    # number of samples in each category
+    m <- sum(idx)
+    n <- sum(jdx)
+  }
+  
+  # gene symbols
+  g1 <- as.character(resdf[rowi, 'gene_i_symbol'])
+  g2 <- as.character(resdf[rowi, 'gene_j_symbol'])
+  
+  if (g1 %in% colnames(rna_m) & g2 %in% colnames(rna_m)) {
+    
+    # proportion of samples showing pattern gene1 > gene2    
+    prop1 <- (sum(labdat[, ..g1] > labdat[, ..g2])/m) # proportion i>j in this cluster
+    prop2 <- (sum(notdat[, ..g1] > notdat[, ..g2])/n) # proportion i>j in others
+        
+    rna_prop_diff[rowi] <- prop1 - prop2
+
+  } else {
+    rna_prop_diff[rowi] <- NA
+  }
+  
+  last_label <- this_label
+}
+
+resdf$rna_prop_diff <- rna_prop_diff
+
+df <- resdf[, c('cluster','pair','gene_i_symbol', 'gene_j_symbol', 'prop_diff', 'rna_prop_diff')]
+
+idx <- sample(1:109837, size=1000)
+
+#plot(x=df$prop_diff[idx], y=df$rna_prop_diff[idx])
+head(df)
+
+write.csv(resdf, file='../results/annotdf_m_rna_diff.csv.gz')
+
+```
+
+
+```{r}
+
+
+resdf <- read_csv(file='../results/annotdf_m_rna_diff.csv.gz')
+
+load('../data/M_processed_data.rda')
+
+### number of pairs that we want.
+wanted_pairs <- 24
+
+# by ordering the table by prop_diff * avg_dist_cluster * avg_dist_not_cluster
+# we are getting gene pairs with high proportions per cluster status
+# and on average, the distance between genes is high effect.
+
+# 1. prop diff must be high
+# 2. effect size must be high for within and outside of cluster
+# 3. direction of differences must be opposite for within and outside of cluster.
+# 3. reduce correlation across feature set, same gene picked many times..
+
+# return the corrleation with the previously selected pairs
+getcors <- function(pairordtable, datatable, selected, proposal) {
+  corlist <- list()
+  for (k in 1:nrow(selected)) {
+    cor1 <- cor(datatable[,gp1$g1[k]], datatable[,gpk$g1]) # correlation with last pair
+    cor2 <- cor(datatable[,gp1$g1[k]], datatable[,gpk$g2]) # correlation with last pair
+    cor3 <- cor(datatable[,gp1$g2[k]], datatable[,gpk$g1]) # correlation with last pair
+    cor4 <- cor(datatable[,gp1$g2[k]], datatable[,gpk$g2]) # correlation with last pair
+    corlist[[k]] <- c(cor1, cor2, cor3, cor4)
+  }
+  return(corlist)
+}
+
+# convert the list of tables to genepairs list
+tab2list <- function(dflist) {
+  pairslist <- list()
+  for (ci in names(dflist)) {
+    df <- dflist[[ci]]
+    genepairs <- c()
+    for (k in 1:nrow(df)) {
+      genepairs <- c(genepairs, c(df[k,'g1'], df[k,'g2']))
+    }
+    pairslist[[ci]] <- genepairs
+  }
+  return(pairslist)
+}
+
+
+# preparing for the scoring
+
+x <- resdf$avg_dist_cluster
+
+resdf$norm_avg_dist_cluster <- (  (x-median(x)) / (max(x) - min(x))  )
+
+y <- resdf$avg_dist_not_cluster
+
+resdf$norm_avg_dist_not_cluster <- (  (y-median(y)) / (max(y) - min(y))  )
+
+
+# create the values that will be used to order pairs.
+score0 <- abs(resdf$prop_diff)*  # want as close to 1 as possible
+          (-1* (resdf$avg_dist_cluster*resdf$avg_dist_not_cluster)) # must be in opposite directions
+
+
+# create the values that will be used to order pairs.
+score1 <- abs(resdf$prop_diff)*  # want as close to 1 as possible
+          (1 - abs(resdf$prop_diff - resdf$rna_prop_diff))*  # want as close to 1 as possible
+          (-1* (resdf$avg_dist_cluster*resdf$avg_dist_not_cluster)) # must be in opposite directions
+
+
+resdf$score2 <- (score1 + abs(min(score1, na.rm = T))) / abs(max(score1,na.rm = T))
+
+scoredf <- data.frame(score0=score0, score1=score1)
+idx <- sample(1:356000, size=10000)
+ggplot(data=scoredf[idx,], aes(y=score1, x=score0)) + geom_point() + xlim(c(0,1.1)) +  ylim(c(0,1.1)) + geom_abline()
+
+
+res0 <- list()
+
+for (this_cluster in c('cluster1','cluster2','cluster3','cluster4','cluster5')) {
+  
+  k <- 2 # decending the ordered pairs table
+  
+  pwant <- wanted_pairs
+  
+  pairs <- resdf[(resdf$cluster == this_cluster),]
+  
+  #min_i_tval <- quantile(pairs$gene_i_min, na.rm=T)['50%']
+  #min_j_tval <- quantile(pairs$gene_j_min, na.rm=T)['50%']
+
+
+  #pairs <- pairs[(pairs$gene_i_min > min_i_tval) &
+  #               (pairs$gene_j_min > min_j_tval),]
+
+
+  # then we get the ordering index
+  idx <- order(pairs$score2, decreasing = T)
+  pairsord <- pairs[idx,]
+  
+  # start with the top
+  gp1 <- data.frame(k=1, 
+                    g1=pairsord$gene_i_symbol[1], g2=pairsord$gene_j_symbol[1], 
+                    pd=pairsord$prop_diff[1],     pr=pairsord$rna_prop_diff[k],
+                    sc=pairsord$score2[1])
+  
+  kmax <- nrow(pairsord)
+
+
+  # for each row in the ordered pairs table
+  while (pwant > 0 & k < kmax) {
+    
+    # proposal: add this pair
+    gpk <- data.frame(k=k, 
+                      g1=pairsord$gene_i_symbol[k], g2=pairsord$gene_j_symbol[k], 
+                      pd=pairsord$prop_diff[k],     pr=pairsord$rna_prop_diff[k],
+                      sc=pairsord$score2[k])
+  
+    # check with previously selected pairs
+    corlist <- getcors(pairsord, dat_m, gp1, gpk)
+    
+    # if all correlation are low, accept the proposal
+    if ( all( unlist( lapply(corlist, function(a) abs( a < 0.85 ))) ) )  {
+      gp1 <- rbind(gp1, gpk)
+      pwant <- pwant-1
+      print(c(k, pwant))
+    }
+    
+    k <- k+1
+  }
+  
+  res0[[this_cluster]] <- gp1
+}
+
+genepairs <- tab2list(res0)
+
+save(genepairs, res0, file='../results/males_genepairs_rna.rda')
+  
+```
+
+
+
+
+
+
+
+
+
+
+
+```{r}
 
 # new gene pairs
 gpairs <- shorter_plist(genepairs, 24)
@@ -1167,12 +1460,29 @@ mod_m$train(data_frame=dat_m,
 
 # run the model
 mod_m$predict(data_frame = val_m, 
-              sample_id = 'SampleID',
+              sample_id = 'Barcode', #'SampleID',
               drop_list = c('Sex'))
 
 
-rownames(val_m) <- val_m$SampleID
-pheno_reorg <- val_m[mod_m$results()$SampleIDs, c("SampleID","Sex","Survival","Censored")]
+
+# get the results table
+resdf <- mod_m$results()
+# add in the survival and censored
+resdf$Survival <- mod_m$test_data$Survival
+resdf$Censored <- mod_m$test_data$Censored
+
+# convert scores to numerics
+resdf$cluster1 <- unlist(resdf$cluster1)
+resdf$cluster2 <- unlist(resdf$cluster2)
+resdf$cluster3 <- unlist(resdf$cluster3)
+resdf$cluster4 <- unlist(resdf$cluster4)
+resdf$cluster5 <- unlist(resdf$cluster5)
+
+
+resdf$CensoredCode <- ifelse(resdf$Censored == 0, yes=1, no=2)
+
+modfit <- survfit(Surv(Survival, CensoredCode)~BestCalls,data=resdf)
+ggsurvplot(modfit, pval = T, xlim=c(0,1700))
 
 
 res0 <- cbind(pheno_reorg, mod_m$results())
@@ -1186,66 +1496,6 @@ surp
 ggsave("../figures/survplot_validation_refined_features_M.pdf", surp$plot, height = 5, width = 10)
 ```
 
-```{r}
-
-load('../results/males_genepairs_val.rda')
-
-# new gene pairs
-gpairs <- shorter_plist(genepairs, 24)
-
-# clean the pairs
-genepairs_cl <- clean_genepairs_list(gpairs, val_m)  # only one with missing genes
-
-
-# xgboost parameters to pass to each sub-classifier in the ensembles
-params1 <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
-               eta=0.3,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
-               nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
-               early_stopping_rounds=2,
-               nthreads=8,     # parallel threads
-               gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
-               lambda=1.5,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
-               alpha=0.25,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
-               verbose=0,
-               train_perc=0.8,
-               combine_function='median',
-               size=11
-)
-
-
-mod_m <- robencla::Robencla$new('m_model')
-
-
-mod_m$train(data_frame=val_dat,
-            label_name='ClusterLabel', #'ClusterLabel2',
-            sample_id = 'SampleID',
-            drop_list = c('Sex'),
-            data_mode=c('pairs'),    # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
-            signatures=NULL,         # 
-            pair_list=genepairs_cl,  # c3_pairs   # subset to these genes.
-            params=params1
-            )
-
-
-# run the model
-mod_m$predict(data_frame = dat_m, 
-              label_name = 'ClusterLabel',
-              sample_id = 'SampleID',
-              drop_list = c('Sex'))
-
-
-cl_test <- mod_m$test_label
-
-cl_pred <- mod_m$results()$BestCall
-
-mat <- as.matrix(table(cl_test, cl_pred))
-sum(diag(mat)) / sum(mat)
-
-write.csv(mat, file='../results/tcga_pred_trained_on_val_conf_mat_M.csv')
-
-mat
-```
-
 
 
 ```{r}
@@ -1254,7 +1504,10 @@ mat
 ############## checking the params ########################
 
 
-genepairs_cl <- clean_genepairs_list(genepairs, dat_f2)
+genepairs_cl <- clean_genepairs_list(genepairs, dat_m)
+
+# new gene pairs
+gpairs <- shorter_plist(genepairs, 12)
 
 # our classifier object named Roberta
 buffy <- Robencla$new("buffy")
@@ -1276,13 +1529,12 @@ params <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I 
 
 
 # First we use the training data
-buffy$autocv(data_frame=dat_f2,
+buffy$autocv(data_frame=dat_m,
              label_name='ClusterLabel',
-             sample_id = 'sample',
-             drop_list = 'Sex',
+             sample_id = 'Barcode',
              data_mode=c('pairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
              signatures=NULL,
-             pair_list=genepairs_cl,  # subset to these genes.
+             pair_list=gpairs,  # subset to these genes.
              params=params,
              cv_rounds=10
 )
@@ -1291,3 +1543,147 @@ buffy$classification_metrics()
 
 
 ```
+
+
+
+
+Compare, before and after parameter sets.
+
+
+
+
+```{r}
+
+load(file='../data/f_genepairs.rda')
+
+load("E:/Work/GBM_clusters/GBM_JIVE_ANALYSIS/data/F_processed_data.rda")
+
+genepairs1 <- fgenepairs$median_min
+genepairs2 <- fgenepairs$rna
+
+
+gpairs <- shorter_plist(genepairs1, 12)
+
+# clean the pairs
+genepairs_cl <- clean_genepairs_list(gpairs, dat_f)  # only one with missing genes
+genepairs_cl <- clean_genepairs_list(gpairs, tcga_f)  # only one with missing genes
+
+
+# xgboost parameters to pass to each sub-classifier in the ensembles
+params1 <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+               eta=0.45,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
+               nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+               early_stopping_rounds=2,
+               nthreads=8,     # parallel threads
+               gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
+               lambda=2.5,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
+               alpha=0.25,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+               verbose=0,
+               train_perc=0.8,
+               combine_function='median',
+               size=11
+)
+
+
+mod_f <- robencla::Robencla$new('f_model')
+
+
+mod_f$train(data_frame=dat_f,
+            label_name='ClusterLabel', #'ClusterLabel2',
+            sample_id = 'Barcode',
+            drop_list = c('Sex'),
+            data_mode=c('pairs'),    # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
+            signatures=NULL,         # 
+            pair_list=genepairs_cl,  # c3_pairs   # subset to these genes.
+            params=params1
+            )
+
+
+# run the model
+mod_f$predict(data_frame = tcga_f, 
+              label_name='ClusterLabel',
+              sample_id = 'Barcode'
+              )
+
+
+# assign the predicted cluster label
+test_dat <- mod_f$test_data[, c('Barcode','ClusterLabel')]
+test_dat$BestCall <- mod_f$results()$BestCall
+
+pheatmap::pheatmap(
+table(Label=test_dat$ClusterLabel, Pred=test_dat$BestCall),
+cluster_rows = F, cluster_cols = F,display_numbers = T,width = 3,height = 4
+,fontsize = 14,filename = '../figures/heatmap_f_rna_genepairs_comparison_before.pdf'
+)
+
+```
+
+
+
+
+
+```{r}
+
+load('../results/results_median_min/males_genepairs.rda')
+gp1 <- genepairs
+load('../results/males_genepairs_rna.rda')
+gp3 <- genepairs
+
+load('../data/M_processed_data.rda')
+
+
+
+gpairs <- shorter_plist(gp1, 24)
+
+# clean the pairs
+genepairs_cl <- clean_genepairs_list(gpairs, dat_m)  # only one with missing genes
+genepairs_cl <- clean_genepairs_list(gpairs, rna_m)  # only one with missing genes
+
+# xgboost parameters to pass to each sub-classifier in the ensembles
+params1 <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+               eta=0.3,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
+               nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+               early_stopping_rounds=2,
+               nthreads=8,     # parallel threads
+               gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
+               lambda=1.5,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
+               alpha=0.25,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+               verbose=0,
+               train_perc=0.8,
+               combine_function='median',
+               size=11
+)
+
+
+mod_m <- robencla::Robencla$new('m_model')
+
+
+mod_m$train(data_frame=dat_m,
+            label_name='ClusterLabel', #'ClusterLabel2',
+            sample_id = 'Barcode',
+            data_mode=c('pairs'),    # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
+            signatures=NULL,         # 
+            pair_list=genepairs_cl,  # c3_pairs   # subset to these genes.
+            params=params1
+            )
+
+
+# run the model
+mod_m$predict(data_frame = rna_m, 
+              label_name = 'ClusterLabel',
+              sample_id = 'Barcode')
+
+
+cl_test <- mod_m$test_label
+cl_pred <- mod_m$results()$BestCall
+
+pheatmap::pheatmap(
+table(Label=cl_test, Pred=cl_pred),
+cluster_rows = F, cluster_cols = F,display_numbers = T,width = 3,height = 4
+,fontsize = 14,filename = '../figures/heatmap_m_rna_genepairs_comparison_before.pdf'
+)
+
+
+
+```
+

@@ -2,14 +2,7 @@ library(ggplot2)
 library(pheatmap)
 library(forcats)
 
-load('results/results_median_min/females_genepairs.rda')
-gp1 <- genepairs
-load('results/females_genepairs_val.rda')
-gp2 <- genepairs
-load('results/females_genepairs_rna.rda')
-gp3 <- genepairs
-load('results/females_genepairs_refined.rda')
-gp4 <- genepairs
+
 
 
 load("E:/Work/GBM_clusters/GBM_JIVE_ANALYSIS/data/F_processed_data.rda")
@@ -21,7 +14,7 @@ annot_f <- read.csv('results/annotdf_f_valdiff.csv.gz')
 
 df <- data.frame()
 for (cl in unique(annot_f$cluster)) {
-  df_new <- data.frame(Cluster=cl, Score=sort(annot_f$score[annot_f$cluster == cl]))
+  df_new <- data.frame(Cluster=cl, Score=sort(annot_f$score[annot_f$cluster == cl ]))  # & abs(annot_f$prop_diff) > 0.5 same plot
   df_new$Feature_Pair <- 1:nrow(df_new)
   df <- rbind(df, df_new)
 }
@@ -72,3 +65,5 @@ mmat <- matrix(data=c(30, 13, 6, 171), byrow=T, ncol=2)
 colnames(mmat) <- c("cluster3","not_cluster3")
 rownames(mmat) <- c("cluster3","not_cluster3")
 pheatmap(mmat, cluster_rows = F, cluster_cols = F, scale = 'row'  )
+
+#################################################################################
