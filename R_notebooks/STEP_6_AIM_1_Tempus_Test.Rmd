@@ -212,7 +212,7 @@ tempus.clin <- read.csv('../data/TEMPUS_Clinical_Data.csv.gz')
 
 gset <- m_genepairs$rna
 
-gpairs <- shorter_plist(gset, 12)  
+gpairs <- shorter_plist(gset, 24)  
 
 lapply(gpairs, function(x) x[! (x %in% colnames(dat_m ))] )
 lapply(gpairs, function(x) x[! (x %in% colnames(tmp_m))] ) # missing "FABP5"  "CD24"   "LGALS3"
@@ -235,14 +235,14 @@ c3_pairs[['notC3']] <- c(genepairs_cl$cluster1, genepairs_cl$cluster2, genepairs
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
 # xgboost parameters to pass to each sub-classifier in the ensembles
-params1 <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
-               eta=0.45,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
+params1 <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+               eta=0.3,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
                nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
                early_stopping_rounds=2,
                nthreads=8,     # parallel threads
-               gamma=1.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
+               gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
                lambda=2.5,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
-               alpha=1.2,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+               alpha=0.25,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
                verbose=0,
                train_perc=0.8,
                combine_function='median',
@@ -255,7 +255,7 @@ mod_m <- robencla::Robencla$new('m_model')
 mod_m$train(data_frame=dat_m,
             label_name='ClusterLabel', #'ClusterLabel2',
             sample_id = 'Barcode',
-            drop_list = c(),
+            drop_list = c('Sex'),
             data_mode=c('pairs'),    # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
             signatures=NULL,         # 
             pair_list=genepairs_cl,  # c3_pairs   # subset to these genes.
@@ -274,6 +274,10 @@ table(mod_m$results()$BestCall)
 #cluster1 cluster2 cluster3 cluster5 
 #      51       70       13       16 
 
+# set 1 - 24 pairs
+#cluster1 cluster2 cluster3 cluster4 cluster5 
+#       2       83        3       21       41 
+
 head(mod_m$results())
 
 # get the results table
@@ -289,16 +293,14 @@ resdf$cluster3 <- unlist(resdf$cluster3)
 resdf$cluster4 <- unlist(resdf$cluster4)
 resdf$cluster5 <- unlist(resdf$cluster5)
 
-r2 <- inner_join(resdf, tempus.clin, join_by(SampleIDs==Study.ID) )
-write.csv(r2, file = 'results/M_Tempus_results.csv')
-
-
-
 resdf$CensoredCode <- ifelse(resdf$Censored == 0, yes=1, no=2)
 
 modfit <- survfit(Surv(Survival, CensoredCode)~BestCalls,data=resdf)
 ggsurvplot(modfit, pval = T, xlim=c(0,1700))
 
+
+r2 <- inner_join(resdf, tempus.clin, join_by(SampleIDs==Study.ID) )
+write.csv(r2, file = 'results/M_Tempus_results.csv')
 
 surp <- ggsurvplot(modfit, pval = T, xlim=c(0,1700) )
 #surp
