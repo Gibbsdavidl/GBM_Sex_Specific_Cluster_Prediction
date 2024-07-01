@@ -10,8 +10,6 @@ args = c('1', '0.005') #commandArgs(trailingOnly=TRUE)
 
 ## MALES OR FEMALES
 dat <- read.csv('../data/jive_training_array_data_M.csv.gz')
-#dat <- read.csv('version3/Males_CV_Data_v3.csv')
-#dat <- read_csv('version3/Females_CV_Data_v3_GC.csv')
 
 # drop the rownames
 dat <- dat[,-1]
@@ -31,6 +29,7 @@ resl <- list()
 #for (this_label in labels) {
 this_label <- labels[as.numeric(args[1])]
 
+
 this_thresh <- as.numeric(args[2])
 
 #  index into this cluster
@@ -48,6 +47,7 @@ n <- sum(jdx)
 
 # for each pair of genes
 for (i in 2:(ngenes-1)){
+  
   for (j in (i+1):ngenes) {
 
     # proportion of samples showing pattern gene1 > gene2    
@@ -69,7 +69,7 @@ for (i in 2:(ngenes-1)){
           n1        <- length(dist1)
           n2        <- length(dist2)
 
-                    #capture this result
+          #capture this result
           resl[[k]] <- c(this_label,
                          k,i,j,
                          prop1,prop2,

@@ -24,7 +24,9 @@ library(survminer)
 ```
 
 
+
 ```{r}
+
 
 # Take the data set, and filter out pair genes that are not present.
 
@@ -52,77 +54,49 @@ clean_genepairs_list <- function(genepairs, dat_x) {
 # pairlist is a list of vectors (paired terms)
 # n is the number of pairs for each entry desired
 
-shorter_plist <- function(pairlist, n) {
+shorter_and_clean <- function(pairlist, n) {
   newlist <- list()
   for (ni in names(pairlist)) {
-    newlist[[ni]] <- pairlist[[ni]][1:(2*n)]
+    newlist[[ni]] <- str_replace_all(pairlist[[ni]][1:(2*n)], '\\.', '_')
   }
   return(newlist)  
 }
 
 
-
 ```
 
-
 ```{r}
-# Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 2)
-# arr_f <- read_csv('../data/jive_training_array_data_F.csv.gz')
-# tmp_f <- read_csv('../data/Tempus_Females_unstranded.csv.gz')
-# 
-# load('../results/results_no_array_min/females_genepairs.rda')
-# gset1 <- genepairs
-# 
-# load('../results/females_genepairs_val.rda')
-# gset2 <- genepairs
-# 
-# load('../results/females_genepairs_rna.rda')
-# gset3 <- genepairs
 
 load('../data/F_processed_data.rda')
-load('../data/f_genepairs.rda')
+load('../results/females_genepairs.rda')
 
 tempus.clin <- read.csv('../data/TEMPUS_Clinical_Data.csv.gz')
 ```
 
 ```{r}
 
-gset <- fgenepairs$rna
-
-gpairs <- shorter_plist(gset, 10)  
-
-lapply(gpairs, function(x) x[! (x %in% colnames(dat_f ))] )
-lapply(gpairs, function(x) x[! (x %in% colnames(tmp_f))] ) # missing "FABP5"  "CD24"   "LGALS3"
-
+gpairs <- shorter_and_clean(genepairs, 10)  
 # clean the pairs
+genepairs_cl <- clean_genepairs_list(gset4, dat_f)  # only one with missing genes
 genepairs_cl <- clean_genepairs_list(gpairs, tmp_f)  # only one with missing genes
 
-gs1 <- c(unlist(unique(genepairs_cl)), "Barcode", "ClusterLabel")
-gs2 <- c(unlist(unique(genepairs_cl)), "Barcode", "Survival", "Censored")
-
-colnames(tmp_f)[19939:19940] <- c('Censored','Survival')
-colnames(tmp_f)[1] <- 'Barcode'
-
-dat_f2 <- dat_f[,gs1]
-tmp_f2 <- tmp_f[,gs2]
 
 # what if ...
-dat_f2$ClusterLabel2 <- ifelse(dat_f$ClusterLabel == 'cluster3', yes = 'C3', no='notC3')
+dat_f$ClusterLabel2 <- ifelse(dat_f$ClusterLabel == 'cluster3', yes = 'C3', no='notC3')
 c3_pairs <- list()
 c3_pairs[['C3']] <- genepairs_cl$cluster3
 c3_pairs[['notC3']] <- c(genepairs_cl$cluster1, genepairs_cl$cluster2, genepairs_cl$cluster4, genepairs_cl$cluster5)
 
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
-# xgboost parameters to pass to each sub-classifier in the ensembles
-params1 <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
-               eta=0.45,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
-               nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
+params1 <- list(max_depth=12,   # "height" of the tree, 6 is actually default.   (xgboost parameter)
+               eta=0.45,        # this is the learning rate. smaller values , more  conservative   (xgboost parameter)
+               nrounds=24,     # number of rounds of training, lower numbers less overfitting  (xgboost parameter)
                early_stopping_rounds=2,
                nthreads=8,     # parallel threads
-               gamma=1.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
+               gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher~ conservative (xgboost)
                lambda=2.5,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
-               alpha=1.2,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
+               alpha=0.25,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
                verbose=0,
                train_perc=0.8,
                combine_function='median',
@@ -138,24 +112,22 @@ mod_f$train(data_frame=dat_f,
             drop_list = c(),
             data_mode=c('pairs'),    # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
             signatures=NULL,         # 
-            pair_list=genepairs_cl,  # c3_pairs   # subset to these genes.
+            pair_list=genepairs_cl, #genepairs_cl,  # c3_pairs   # subset to these genes.
             params=params1
             )
 
 
 # run the model
-mod_f$predict(data_frame = tmp_f2, 
-              sample_id = 'Barcode',
-              drop_list = c('Survival', 'Censored'))
+mod_f$predict(data_frame = tmp_f, 
+              sample_id = 'Barcode')
 
 
 # check the predictions
 table(mod_f$results()$BestCall)
-#cluster1 cluster2 cluster3 cluster4 cluster5 
-#      43        3       10        5       25 
 
-head(mod_f$results())
-
+#cluster1 cluster2 cluster3 cluster5 
+#      28       91       11       20 
+      
 # get the results table
 resdf <- mod_f$results()
 # add in the survival and censored
@@ -168,27 +140,23 @@ resdf$cluster2 <- unlist(resdf$cluster2)
 resdf$cluster3 <- unlist(resdf$cluster3)
 resdf$cluster4 <- unlist(resdf$cluster4)
 resdf$cluster5 <- unlist(resdf$cluster5)
+resdf$C3 <- unlist(resdf$C3)
+resdf$notC3 <- unlist(resdf$notC3)
 
-
-r2 <- inner_join(resdf, tempus.clin, join_by(SampleIDs==Study.ID) )
-write.csv(r2, file = 'results/F_Tempus_results.csv')
+#r2 <- inner_join(resdf, tempus.clin, join_by(SampleIDs==Study.ID) )
 
 resdf$CensoredCode <- ifelse(resdf$Censored == 'alive', yes=1, no=2)
 
 modfit <- survfit(Surv(Survival, CensoredCode)~BestCalls,data=resdf)
-ggsurvplot(modfit, pval = T, xlim=c(0,1700))
+surp <- ggsurvplot(modfit, pval = T, xlim=c(0,1700))
+surp
 
+ggsave("../figures/survplot_tempus_F.pdf", surp$plot, height = 8, width = 8)
+#ggsave("../figures/survplot_tempus_F_curated_genepairs.pdf", surp$plot, height = 8, width = 8)
 
-#surp <- ggsurvplot(modfit, pval = T, xlim=c(0,1700) )
-#surp
-#ggsave("../figures/survplot_tempus_refined_features_F.pdf", surp$plot, height = 5, width = 10)
+#ggsave("../figures/survplot_tempus_F_curated_genepairs.pdf", surp$plot, height = 8, width = 8)
 
-# scores for the samples called cluster3
-#boxplot(as.numeric(resdf$cluster3)~as.factor(resdf$BestCalls))
-
-
-#boxplot(as.numeric(resdf$C3)~as.factor(resdf$BestCalls))
-
+save(r2, file='../results/Tempus_F_pred_results_table_binary_C3.rda')
 ```
 
 
@@ -202,7 +170,7 @@ MALES
 ```{r}
 
 load('../data/M_processed_data.rda')
-load('../data/m_genepairs.rda')
+load('../results/males_genepairs.rda')
 
 
 tempus.clin <- read.csv('../data/TEMPUS_Clinical_Data.csv.gz')
@@ -210,32 +178,16 @@ tempus.clin <- read.csv('../data/TEMPUS_Clinical_Data.csv.gz')
 
 ```{r}
 
-gset <- m_genepairs$rna
 
-gpairs <- shorter_plist(gset, 24)  
-
-lapply(gpairs, function(x) x[! (x %in% colnames(dat_m ))] )
-lapply(gpairs, function(x) x[! (x %in% colnames(tmp_m))] ) # missing "FABP5"  "CD24"   "LGALS3"
-
+gpairs <- shorter_and_clean(genepairs, 10)  
 # clean the pairs
+genepairs_cl <- clean_genepairs_list(gpairs, dat_m)  # only one with missing genes
 genepairs_cl <- clean_genepairs_list(gpairs, tmp_m)  # only one with missing genes
 
-gs1 <- c(unlist(unique(genepairs_cl)), "Barcode", "ClusterLabel")
-gs2 <- c(unlist(unique(genepairs_cl)), "Barcode", "Survival", "Censored")
-
-dat_m2 <- dat_m[,gs1]
-tmp_m2 <- tmp_m[,gs2]
-
-# what if ...
-dat_m2$ClusterLabel2 <- ifelse(dat_m$ClusterLabel == 'cluster3', yes = 'C3', no='notC3')
-c3_pairs <- list()
-c3_pairs[['C3']] <- genepairs_cl$cluster3
-c3_pairs[['notC3']] <- c(genepairs_cl$cluster1, genepairs_cl$cluster2, genepairs_cl$cluster4, genepairs_cl$cluster5)
-
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
 # xgboost parameters to pass to each sub-classifier in the ensembles
-params1 <- list(max_depth=6,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
+params1 <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
                eta=0.3,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
                nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
                early_stopping_rounds=2,
@@ -264,9 +216,8 @@ mod_m$train(data_frame=dat_m,
 
 
 # run the model
-mod_m$predict(data_frame = tmp_m2, 
-              sample_id = 'Barcode',
-              drop_list = c('Survival', 'Censored'))
+mod_m$predict(data_frame = tmp_m, 
+              sample_id = 'Barcode')
 
 
 # check the predictions
@@ -298,19 +249,7 @@ resdf$CensoredCode <- ifelse(resdf$Censored == 0, yes=1, no=2)
 modfit <- survfit(Surv(Survival, CensoredCode)~BestCalls,data=resdf)
 ggsurvplot(modfit, pval = T, xlim=c(0,1700))
 
-
-r2 <- inner_join(resdf, tempus.clin, join_by(SampleIDs==Study.ID) )
-write.csv(r2, file = 'results/M_Tempus_results.csv')
-
-surp <- ggsurvplot(modfit, pval = T, xlim=c(0,1700) )
-#surp
-ggsave("../figures/survplot_tempus_refined_features_M.pdf", surp$plot, height = 8, width = 8)
-
-# scores for the samples called cluster3
-#boxplot(as.numeric(resdf$cluster3)~as.factor(resdf$BestCalls))
-
-
-#boxplot(as.numeric(resdf$C3)~as.factor(resdf$BestCalls))
+ggsave("../figures/survplot_tempus_M_with_female_features.pdf", surp$plot, height = 8, width = 8)
 
 ```
 

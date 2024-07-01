@@ -6,7 +6,6 @@ library(survminer)
 
 
 # Take the data set, and filter out pair genes that are not present.
-
 clean_genepairs_list <- function(genepairs, dat_x) {
   genepairs_clean <- list()
   i <- 1
@@ -30,74 +29,22 @@ clean_genepairs_list <- function(genepairs, dat_x) {
 
 # pairlist is a list of vectors (paired terms)
 # n is the number of pairs for each entry desired
-
-shorter_plist <- function(pairlist, n) {
+shorter_and_clean <- function(pairlist, n) {
   newlist <- list()
   for (ni in names(pairlist)) {
-    newlist[[ni]] <- pairlist[[ni]][1:(2*n)]
+    newlist[[ni]] <- str_replace_all(pairlist[[ni]][1:(2*n)], '\\.', '_')
   }
   return(newlist)  
 }
 
 
-# read in the data
-Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 2)
-# #arr_f <- read_csv('../data/jive_training_array_data_F.csv.gz')
-# #cpt_f <- read_csv('../data/cptac3_gbm_rnaseq_table_unstranded_Female.csv.gz')
-# load('../data/tcga_array_data_F.rda')
-# arr_f <- dat_f
-# cpt_f <- cptac3.rnaseq.f
-
-#load('../results/results_no_array_min/females_genepairs.rda')
-#gset1 <- genepairs
-
-#load('../results/females_genepairs_val.rda')
-#gset2 <- genepairs
-
 load('data/F_processed_data.rda')
+load('results/females_genepairs.rda')
 
-load('results/females_genepairs_rna.rda')
-gset3 <- genepairs
-
-
-df <- read.csv('results/feature_importance/feature_set_4.csv')
-df[23,3] <- "NKX2-2"
-
-gset4 <- list()
-for (i in 1:nrow(df)) {
-  cl <- df$ClusterLabel[i]
-  ga <- df$GeneA[i]
-  gb <- df$GeneB[i]
-  gset4[[cl]] <- c(ga, gb, as.vector(gset4[[cl]]) )
-}
-
-
-# check they're present in the data
-lapply(gset4, function(x) x[! (x %in% colnames(dat_f ))] )
-lapply(gset4, function(x) x[! (x %in% colnames(cpt_f))] ) # missing "FABP5"  "CD24"   "LGALS3"
-
+gpairs <- shorter_and_clean(genepairs, 3)  
 # clean the pairs
-#gset3 <- shorter_plist(gset3, 10)
-genepairs_cl <- clean_genepairs_list(gset3, cpt_f) # only one with missing genes
-
-gs1 <- c(unlist(unique(genepairs_cl)), "Barcode", "ClusterLabel")
-gs2 <- c(unlist(unique(genepairs_cl)), "Barcode", "diag__days_to_last_known_disease_status", "demo__vital_status", "demo__gender")
-
-dat_f2 <- dat_f[,gs1]
-cpt_f2 <- cpt_f[,gs2]
-
-
-# "fix" the overall survival in days, paitents still alive are listed as "--"
-cpt_f2_surv <- as.numeric(cpt_f2$diag__days_to_last_known_disease_status)
-#val_f <- val_f[val_f_surv > 10,]
-#val_f_surv <- as.numeric(val_f$Survival)
-cpt_f2$Survival <- cpt_f2_surv
-
-# what if ...
-dat_f2$ClusterLabel2 <- ifelse(dat_f2$ClusterLabel == 'cluster3', yes = 'C3', no='notC3')
-c3_pairs <- list()
-c3_pairs[['C3']] <- genepairs_cl$cluster3
-c3_pairs[['notC3']] <- c(genepairs_cl$cluster1, genepairs_cl$cluster2, genepairs_cl$cluster4, genepairs_cl$cluster5)
+genepairs_cl <- clean_genepairs_list(gpairs, dat_f)  # only one with missing genes
+genepairs_cl <- clean_genepairs_list(gpairs, cpt_f)  # only one with missing genes
 
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
@@ -121,21 +68,20 @@ params1 <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I
 mod_f <- robencla::Robencla$new('f_model')
 
 
-mod_f$train(data_frame=dat_f2,
+mod_f$train(data_frame=dat_f,
             label_name='ClusterLabel',
             sample_id = 'Barcode',
             drop_list = c(), #c('ClusterLabel2'),
             data_mode=c('pairs'),    # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
             signatures=NULL,         #
-            pair_list=gset4,  #    # subset to these genes.
+            pair_list=genepairs_cl,  #    # subset to these genes.
             params=params1
 )
 
 
 # run the model
-mod_f$predict(data_frame = cpt_f2, 
-              sample_id = 'Barcode',
-              drop_list = c())
+mod_f$predict(data_frame = cpt_f, 
+              sample_id = 'Barcode')
 
 #"sample", "diag__days_to_last_known_disease_status", "demo__vital_status", "demo__gender"
 
@@ -144,10 +90,8 @@ table(mod_f$results()$BestCall)
 #cluster1 cluster2 cluster3 cluster5 
 #14       15        2       13 
 
-head(mod_f$results())
-
 # reorder the tables
-cpt_f2 <- as.data.frame(cpt_f2)
+cpt_f2 <- as.data.frame(cpt_f)
 rownames(cpt_f2) <- cpt_f2$Barcode
 pheno_reorg <- cpt_f2[mod_f$results()$SampleIDs, c("Barcode", "diag__days_to_last_known_disease_status", "demo__vital_status", "demo__gender")]
 
@@ -171,11 +115,16 @@ ggsurvplot(modfit, pval = T)
 
 surp <- ggsurvplot(modfit, pval = T, xlim=c(0,1700) )
 surp
-ggsave("figures/survplot_cptac3_4pairs_refined_features_F_gset4_allpairs.pdf", surp$plot, height = 8, width = 8)
 
-# scores for the samples called cluster3
-#boxplot(as.numeric(resdf$cluster3)~as.factor(resdf$BestCalls))
+ggsave("figures/survplot_cptac3_F.pdf", surp$plot, height = 8, width = 8)
 
+mod_f$importance()
 
-#boxplot(as.numeric(resdf$C3)~as.factor(resdf$BestCalls))
+# $cluster3
+# # A tibble: 3 × 4
+# Feature       MedGain MedCover MedFreq
+# <chr>           <dbl>    <dbl>   <dbl>
+# 1 RBP1_X_BMP2     0.671    0.551   0.444
+# 2 C1QL1_X_FABP5   0.190    0.271   0.333
+# 3 MT1M_X_FERMT1   0.126    0.187   0.25 
 

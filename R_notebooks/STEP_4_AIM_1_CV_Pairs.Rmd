@@ -27,10 +27,10 @@ library(pheatmap)
 # pairlist is a list of vectors (paired terms)
 # n is the number of pairs for each entry desired
 
-shorter_plist <- function(pairlist, n) {
+shorter_and_clean <- function(pairlist, n) {
   newlist <- list()
   for (ni in names(pairlist)) {
-    newlist[[ni]] <- pairlist[[ni]][1:(2*n)]
+    newlist[[ni]] <- str_replace_all(pairlist[[ni]][1:(2*n)], '\\.', '_')
   }
   return(newlist)  
 }
@@ -41,11 +41,9 @@ shorter_plist <- function(pairlist, n) {
 
 
 ```{r}
-#dat.m <- read_csv('../data/jive_training_array_data_M.csv.gz')
-#load("../results/males_genepairs.rda")
 
 load('../data/M_processed_data.rda')
-load('../data/m_genepairs.rda')
+load('../results/males_genepairs.rda')
 
 # removing signature genes that are not available in our data sets
 male.jive.gene.list <- readRDS("../data/Males_jive_cluster_genes.rds") %>% dplyr::filter(value %in% colnames(dat_m))
@@ -58,7 +56,6 @@ sigs_m <- list("C1"=male.jive.gene.list$value[male.jive.gene.list$cluster.group 
                "C5"=male.jive.gene.list$value[male.jive.gene.list$cluster.group == 'cluster5']
 )
 
-#dat.m <- dat.m[,-1]
 ```
 
 ```{r}
@@ -76,8 +73,6 @@ print(tail(colnames(dat_m)))
 # our classifier object named Roberta
 mod_m <- Robencla$new("mod_m")
 
-genepairs <- m_genepairs$min_median
-
 # xgboost parameters to pass to each sub-classifier in the ensembles
 params <- list(max_depth=12,   # "height" of the tree,   (xgboost parameter)
                eta=0.45,       # this is the learning rate. smaller values slow it down  (xgboost parameter)
@@ -93,21 +88,20 @@ params <- list(max_depth=12,   # "height" of the tree,   (xgboost parameter)
                size=11
 )
 
-gpairs <- shorter_plist(genepairs, 10)
+gpairs <- shorter_and_clean(genepairs, 10)
 
 # First we use the training data
 mod_m$autocv(data_frame=dat_m,
             label_name='ClusterLabel',
             sample_id = 'Barcode',
             drop_list='Sex',
-            data_mode=c('sigpairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
-            signatures=sigs_m, #sigs.m,
-            pair_list=sigs_m, #gpairs,  # subset to these genes.
+            data_mode=c('pairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
+            signatures=NULL, 
+            pair_list=gpairs, # subset to these genes.
             params=params,
             cv_rounds=10
             )
 
-save(mod_m, file='../results/models/M_TCGA_CV.rda')
 
 ```
 
@@ -119,13 +113,7 @@ df.m$cluster3 <- as.numeric(df.m$cluster3)
 df.m$cluster4 <- as.numeric(df.m$cluster4)
 df.m$cluster5 <- as.numeric(df.m$cluster5)
 head(df.m)
-
-#write.table(as.data.frame(df.m), '../results/male_tcga_cv_pairs_and_sigpairs.csv', sep=',', quote = F, row.names = F)
-write.csv(as.data.frame(df.m), '../results/male_tcga_cv_pairs_only.csv', sep=',', quote = F, row.names = F)
-
 df.m
-
-
 ```
 
 ```{r}
@@ -145,22 +133,21 @@ tabdf <- table(Pred=df.m$BestCalls, True=df.m$Label)
 print(tabdf)
 
 tabtbl <- as.data.frame(tabdf) %>% 
-  pivot_wider(id_cols = Pred,names_from = True, values_from = Freq) %>% 
-  select(-Pred) %>%
-  scale(center = F) # Z-scores
+  pivot_wider(id_cols = Pred, names_from = True, values_from = Freq) %>% 
+  select(-Pred) #%>%
+  #scale(center = F) # Z-scores
 rownames(tabtbl) <- colnames(tabtbl)
 
-p <- pheatmap(tabtbl, cluster_rows = F, cluster_cols = F)
-save_pheatmap_pdf(p, "../figures/males_TCGA_CV_heatmap.pdf", width=5, height=5)
+p <- pheatmap(tabtbl, cluster_rows = F, cluster_cols = F, display_numbers = T, 
+              scale = 'column', fontsize_number = 12)
 
 #           True
 # Pred       cluster1 cluster2 cluster3 cluster4 cluster5
-#   cluster1       31        4        1        2        2
-#   cluster2        3       78        5        2        1
-#   cluster3        2        0       24        0        2
+#   cluster1       32        7        1        2        1
+#   cluster2        4       75        2        1        2
+#   cluster3        1        0       27        0        2
 #   cluster4        1        0        1       22        0
-#   cluster5        1        3        4        0       31
-
+#   cluster5        0        3        4        1       31
 ```
 
 
@@ -168,7 +155,7 @@ save_pheatmap_pdf(p, "../figures/males_TCGA_CV_heatmap.pdf", width=5, height=5)
 
 ```{r}
 metrics <- mod_m$classification_metrics()
-write_csv(metrics, file='../results/males_tcga_array_metrics_step4.csv')
+
 metrics
 ```
 
@@ -176,9 +163,25 @@ metrics
 
 imp_list <- mod_m$importance()
 
-save(imp_list, file='../results/male_CV_pairs_importance_step4.rda')
-
 imp_list
+
+```
+
+
+And to write everything out
+
+```{r}
+
+save(mod_m, file='../results/models/M_TCGA_CV.rda')
+
+write_csv(metrics, file='../results/males_TCGA_CV_metrics_step4.csv')
+
+write.csv(as.data.frame(df.m), '../results/male_TCGA_CV.csv', sep=',', quote = F, row.names = F)
+
+save(imp_list, file='../results/male_TCGA_CV_pairs_importance_step4.rda')
+
+save_pheatmap_pdf(p, "../figures/males_TCGA_CV_heatmap.pdf", width=5, height=5)
+
 ```
 
 ```{r}
@@ -194,16 +197,6 @@ impdf <- rbind(df1[,c(1,2,4)],df2[,c(1,2,4)],df3[,c(1,2,4)],df4[,c(1,2,4)],df5[,
 colnames(impdf) <- c('Top10','Cluster','Med_Info_Gain')
 
 
-
-#ggplot(impdf, aes(Top15)) + 
-#  geom_line(aes(y=cluster1),color="black") +
-#  geom_line(aes(y=cluster2),color="orange") +
-#  geom_line(aes(y=cluster3),color="skyblue") +
-#  geom_line(aes(y=cluster4),color="darkgreen") +
-#  geom_line(aes(y=cluster5),color="red") +
-#  xlab('Top 15 gene pairs') + 
-#  ylab('Median information gain')
-
 ggplot(impdf, aes(x=Top10,y=Med_Info_Gain,color=Cluster)) + geom_line() + 
   xlab("Top 10 features per cluster") + ylab("Median Information Gain")
 ggsave('../figures/males_TCGA_CV_feature_importance.pdf')
@@ -217,71 +210,19 @@ write.csv(allimp, file='../results/male_importance_table.csv')
 
 
 
-```{r}
-#ensemble_rocs(anne)
-plot_roc(mod_m, 1, flip=T)
-```
 
-```{r}
-#ensemble_rocs(anne)
-plot_roc(mod_m, 2, flip=T)
-```
 
-```{r}
-#ensemble_rocs(anne)
-plot_roc(mod_m, 3, flip=T)
-```
 
-```{r}
-#ensemble_rocs(anne)
-plot_roc(mod_m, 4, flip=F)
-```
-
-```{r}
-#ensemble_rocs(anne)
-plot_roc(mod_m, 5, flip=F)
-```
-
-```{r}
-save(mod_m, file='../models/males_tcga_array_step4.rda')
-```
-
+FEMALES
 
 
 
 
 
 ```{r}
-
-
-
-
-
-### FEMALES ###
-
-
-
-
-
-
-
-
-```
-
-
-
-
-
-
-
-```{r}
-#dat_f <- read_csv('../data/jive_training_array_data_F.csv.gz')
-#dat_f <- dat_f[,-1]
-#load('../results/females_genepairs.rda')
-#lapply(genepairs, function(x) x[! (x %in% colnames(dat_f))] )
 
 load('../data/F_processed_data.rda')
-load('../data/f_genepairs.rda')
+load('../results/females_genepairs.rda')
 
 
 # removing signature genes that are not available in our data sets
@@ -300,17 +241,12 @@ sigs_f <- list("C1"=female.jive.gene.list$value[female.jive.gene.list$cluster.gr
 table(dat_f$ClusterLabel)
 ```
 
-```{r}
-lapply(genepairs, length)
-```
-
-
 
 
 ```{r}
 
 # our classifier object named Roberta
-buffy <- Robencla$new("buffy")
+buffy <- Robencla$new("fmod")
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
 params <- list(max_depth=12,   # "height" of the tree, 6 is actually default.   (xgboost parameter)
@@ -328,7 +264,7 @@ params <- list(max_depth=12,   # "height" of the tree, 6 is actually default.   
 )
 
 
-glist <- shorter_plist(fgenepairs$median_min, 10)
+glist <- shorter_and_clean(genepairs, 10)
 
 # First we use the training data
 buffy$autocv(data_frame=dat_f,
@@ -342,7 +278,6 @@ buffy$autocv(data_frame=dat_f,
             cv_rounds=10
             )
 
-save(buffy, file='../results/models/F_tcga_array_CV.rda')
 ```
 
 ```{r}
@@ -354,7 +289,6 @@ df.f$cluster4 <- as.numeric(df.f$cluster4)
 df.f$cluster5 <- as.numeric(df.f$cluster5)
 head(df.f)
 
-write.table(as.data.frame(df.f), '../results/female_cv_pairs_step4.csv', sep=',', quote = F, row.names = F)
 ```
 
 ```{r}
@@ -373,28 +307,33 @@ tabdf <- table(Pred=df.f$BestCalls, True=df.f$Label)
 print(tabdf)
 
 tabtbl <- as.data.frame(tabdf) %>% 
-  pivot_wider(id_cols = Pred,names_from = True, values_from = Freq) %>% 
-  select(-Pred) %>%
-  scale(center = F) # Z-scores
+  pivot_wider(id_cols = Pred, names_from = True, values_from = Freq) %>% 
+  select(-Pred) #%>%
+  #scale(center = F) # Z-scores
 rownames(tabtbl) <- colnames(tabtbl)
 
-p <- pheatmap(tabtbl, cluster_rows = F, cluster_cols = F)
+p <- pheatmap(tabtbl, cluster_rows = F, cluster_cols = F, display_numbers = T, 
+              scale = 'column', fontsize_number = 12)
 
-save_pheatmap_pdf(p, "../figures/female_TCGA_CV_heatmap.pdf")
+#           True
+# Pred       cluster1 cluster2 cluster3 cluster4 cluster5
+#   cluster1       34        2        0        2        4
+#   cluster2        2       20        1        2        1
+#   cluster3        0        0       11        0        0
+#   cluster4        3        1        0       14        0
+#   cluster5        2        1        2        2       35
 
 ```
 
 ```{r}
 metrics <- buffy$classification_metrics()
-write_csv(metrics, file='../results/females_tcga_array_metrics_step4.csv')
+
 metrics
 ```
 
 ```{r}
 
 imp_list <- buffy$importance()
-
-save(imp_list, file='../results/female_CV_pairs_importance_step4.rda')
 
 imp_list
 
@@ -413,171 +352,31 @@ impdf <- rbind(df1[,c(1,2,4)],df2[,c(1,2,4)],df3[,c(1,2,4)],df4[,c(1,2,4)],df5[,
 
 colnames(impdf) <- c('Top10','Cluster','Med_Info_Gain')
 
-#ggplot(impdf, aes(Top15)) + 
-#  geom_line(aes(y=cluster1),color="black") +
-#  geom_line(aes(y=cluster2),color="orange") +
-#  geom_line(aes(y=cluster3),color="skyblue") +
-#  geom_line(aes(y=cluster4),color="darkgreen") +
-#  geom_line(aes(y=cluster5),color="red") +
-#  xlab('Top 15 gene pairs') + 
-#  ylab('Median information gain')
-
 ggplot(impdf, aes(x=Top10,y=Med_Info_Gain,color=Cluster)) + geom_line() + 
   xlab("Top 10 features per cluster") + ylab("Median Information Gain")
 ggsave("../figures/female_TCGA_CV_feature_importance.pdf")
 
-
-load('../results/female_CV_pairs_importance_step4.rda')
-
 allimp <- rbind(df1,df2,df3,df4,df5)
 
-write.csv(allimp, file='../results/female_importance_table.csv')
-
 ```
 
 
 
 ```{r}
-#ensemble_rocs(anne)
-plot_roc(buffy, 1, flip=T)
-```
 
-```{r}
-#ensemble_rocs(anne)
-plot_roc(buffy, 2, flip=T)
-```
+save(buffy, file='../results/models/F_TCGA_CV_array.rda')
 
-```{r}
-#ensemble_rocs(anne)
-plot_roc(buffy, 3, flip=T)
-```
+write_csv(metrics, file='../results/females_TCGA_CV_metrics_step4.csv')
 
-```{r}
-#ensemble_rocs(anne)
-plot_roc(buffy, 4, flip=T)
-```
+save_pheatmap_pdf(p, "../figures/female_TCGA_CV_heatmap.pdf")
 
-```{r}
-#ensemble_rocs(anne)
-plot_roc(buffy, 5, flip=F)
-```
+write.table(as.data.frame(df.f), '../results/female_TCGA_CV_pairs_step4.csv', sep=',', quote = F, row.names = F)
 
-```{r}
+save(imp_list, file='../results/female_TCGA_CV_pairs_importance_step4.rda')
 
-save(buffy, file='../models/females_tcga_array_step4.rda')
-
+write.csv(allimp, file='../results/female_TCGA_CV_importance_table.csv')
 #FIN
 ```
 
-
-
-
-
-EXTRAS
-
-```{r}
-
-
-# in case we want to test it #
-idx <- sample(1:220, size=140, replace = F)
-jdx <- setdiff(1:220, idx)
-train <- dat.m[idx,1:ncol(dat.m)]
-test <- dat.m[jdx,1:ncol(dat.m)]
-
-# our classifier object named Roberta
-mod_m <- Robencla$new("male models")
-
-# xgboost parameters to pass to each sub-classifier in the ensembles
-params <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
-               eta=0.45,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
-               nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
-               early_stopping_rounds=2,
-               nthreads=8,     # parallel threads
-               gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
-               lambda=2.5,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
-               alpha=0.25,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
-               verbose=0,
-               train_perc=0.8,
-               combine_function='median',
-               size=11
-)
-
-gpairs <- shorter_plist(genepairs, 5)
-
-mod_m$train(data_frame=train,
-            label_name='ClusterLabel',
-            sample_id = 'Barcode',
-            drop_list = 'Sex',
-            data_mode=c('pairs'), # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
-            signatures=NULL,
-            pair_list=genepairs,  # subset to these genes.
-            params=params
-            )
-
-mod_m$predict(data_frame = test, 
-              label_name = 'ClusterLabel', 
-              sample_id = 'Barcode')#,
-              #drop_list = 'Sex')
-
-table(mod_m$test_label, mod_m$results()$BestCall)
-
-mod_m$importance()
-```
-
-
-
-
-
-
-```{r}
-
-# in case we want to test it #
-idx <- sample(1:139, size=100, replace = F)
-jdx <- setdiff(1:139, idx)
-train <- dat_f[idx,]
-test <- dat_f[jdx,]
-
-# our classifier object named Roberta
-buffy <- Robencla$new("buffy")
-
-# genes with dots in the symbol get transformed to _
-#lapply(genepairs, function(x) x[! (x %in% colnames(buffy$train_data))] )
-#genepairs$cluster5[25] <- "CTC-338M12_4"
-
-# xgboost parameters to pass to each sub-classifier in the ensembles
-params <- list(max_depth=12,   # "height" of the tree, 6 is actually default. I think about 12 seems better.  (xgboost parameter)
-               eta=0.45,        # this is the learning rate. smaller values slow it down, more  conservative   (xgboost parameter)
-               nrounds=24,     # number of rounds of training, lower numbers less overfitting (potentially)  (xgboost parameter)
-               early_stopping_rounds=2,
-               nthreads=8,     # parallel threads
-               gamma=0.2,      # Minimum loss req'd to again partition a leaf node. higher number ~ more conservative (xgboost)
-               lambda=2.5,     # L2 regularization term on weights, higher number ~ more conservative (xgboost parameter)
-               alpha=0.25,      # L1 regularization term on weights. higher number ~ more conservative (xgboost parameter)
-               verbose=0,
-               train_perc=0.8,
-               combine_function='median',
-               size=11
-)
-
-gpairs <- shorter_plist(genepairs, 5)
-
-buffy$train(data_frame=train,
-            label_name='ClusterLabel',
-            sample_id = 'Barcode',
-            drop_list = 'Sex',
-            data_mode='pairs', # pairs, allpairs, sigpairs, quartiles, tertiles, binarize, ranks, original #
-            signatures=NULL,
-            pair_list=gpairs,  # subset to these genes.
-            params=params
-            )
-
-buffy$predict(data_frame = test, 
-              label_name = 'ClusterLabel', 
-              sample_id = 'Barcode',
-              drop_list = 'Sex')
-
-table(buffy$test_label, buffy$results()$BestCall)
-
-```
 
 

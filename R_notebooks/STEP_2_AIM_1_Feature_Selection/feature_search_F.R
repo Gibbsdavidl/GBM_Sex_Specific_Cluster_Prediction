@@ -41,11 +41,9 @@ m <- sum(idx)
 n <- sum(jdx)
 
 # for each pair of genes
-for (i in 2:20) { #(ngenes-1)){
+for (i in 2:(ngenes-1)){
 
-  for (j in (i+1):100) { #ngenes) {
-
-    print(paste0(i, '__', j))
+  for (j in (i+1):ngenes) {
 
     # proportion of samples showing pattern gene1 > gene2    
     prop1 <- (sum(labdat[,i] > labdat[,j])/m) # proportion i>j in this cluster

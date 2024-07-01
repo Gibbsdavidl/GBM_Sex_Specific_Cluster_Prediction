@@ -16,16 +16,15 @@ First to read in the data and the feature selection metrics.
 
 ```{r}
 
-array_f  <- read_csv('../data/jive_training_array_data_F.csv.gz')
+#array_f  <- read_csv('../data/jive_training_array_data_F.csv.gz')
+load('../data/F_processed_data.rda')
 
-resdf_f <- read_csv('../results/feature_selection_table_female.csv')
+resdf_f <- read_csv('../results/feature_selection_table_female.csv.gz')
 
 # drop the first column of row numbers
-array_f <- array_f[,-1]
+#array_f <- array_f[,-1]
 
 table(resdf_f$cluster)
-
-tail(colnames(array_f))
 
 ```
 
@@ -34,41 +33,22 @@ Then we can bring in the gene symbols
 ```{r}
 
 # don't count the annotation columns at the end
-array_ncol <- ncol(array_f)-3
-
-# first get the min value for each gene in the array data
-minExprVals <- apply(array_f[,1:array_ncol], 2, min, na.rm=T)
-
-# first get the min value for each gene in the array data
-medExprVals <- apply(array_f[,1:array_ncol], 2, median, na.rm=T)
+array_ncol <- ncol(dat_f)-3
 
 # get gene IDs from the array
-genesi <- colnames(array_f)[resdf_f$gene_i]
-genesj <- colnames(array_f)[resdf_f$gene_j]
+genesi <- colnames(dat_f)[resdf_f$gene_i]
+genesj <- colnames(dat_f)[resdf_f$gene_j]
 
-# get the medians and mins out
-medi <- medExprVals[resdf_f$gene_i]
-medj <- medExprVals[resdf_f$gene_j]
-mini <- minExprVals[resdf_f$gene_i]
-minj <- minExprVals[resdf_f$gene_j]
-
-
+# start a new table
 annotdf_f <- resdf_f
 annotdf_f['gene_i_symbol'] <- genesi
 annotdf_f['gene_j_symbol'] <- genesj
-annotdf_f['gene_i_min'] <- mini
-annotdf_f['gene_j_min'] <- minj
-annotdf_f['gene_i_med'] <- medi
-annotdf_f['gene_j_med'] <- medj
 
-
+# compute the ranking score
 score <- abs(annotdf_f$prop_diff)*(-1*annotdf_f$avg_dist_cluster*annotdf_f$avg_dist_not_cluster)
 annotdf_f$score <- score
 
-
-table(annotdf_f$cluster)
-
-write.csv(annotdf_f, file = '../results/annotdf_f.csv')
+write.csv(annotdf_f, file = '../results/annotdf_f.csv.gz')
 ```
 
 Next we rank the gene pair selection metrics and take the best!
@@ -79,7 +59,7 @@ Next we rank the gene pair selection metrics and take the best!
 
 
 ### number of pairs that we want.
-wanted_pairs <- 32
+wanted_pairs <- 16
 
 # by ordering the table by prop_diff * avg_dist_cluster * avg_dist_not_cluster
 # we are getting gene pairs with high proportions per cluster status
@@ -94,10 +74,10 @@ wanted_pairs <- 32
 getcors <- function(pairordtable, datatable, selected, proposal) {
   corlist <- list()
   for (k in 1:nrow(selected)) {
-    cor1 <- cor(array_f[,gp1$g1[k]], array_f[,gpk$g1]) # correlation with last pair
-    cor2 <- cor(array_f[,gp1$g1[k]], array_f[,gpk$g2]) # correlation with last pair
-    cor3 <- cor(array_f[,gp1$g2[k]], array_f[,gpk$g1]) # correlation with last pair
-    cor4 <- cor(array_f[,gp1$g2[k]], array_f[,gpk$g2]) # correlation with last pair
+    cor1 <- cor(datatable[,gp1$g1[k]], datatable[,gpk$g1]) # correlation with last pair
+    cor2 <- cor(datatable[,gp1$g1[k]], datatable[,gpk$g2]) # correlation with last pair
+    cor3 <- cor(datatable[,gp1$g2[k]], datatable[,gpk$g1]) # correlation with last pair
+    cor4 <- cor(datatable[,gp1$g2[k]], datatable[,gpk$g2]) # correlation with last pair
     corlist[[k]] <- c(cor1, cor2, cor3, cor4)
   }
   return(corlist)
@@ -125,38 +105,34 @@ for (this_cluster in c('cluster1','cluster2','cluster3','cluster4','cluster5')) 
   pwant <- wanted_pairs
   
   pairs <- annotdf_f[(annotdf_f$cluster == this_cluster),]
-  
-  min_i_tval <- quantile(pairs$gene_i_min,na.rm=T)['50%']
-  min_j_tval <- quantile(pairs$gene_j_min,na.rm=T)['50%']
-  
-  
-  pairs <- pairs[(pairs$gene_i_min > min_i_tval) &
-                 (pairs$gene_j_min > min_j_tval),]
-  
-  # create the values that will be used to order pairs.
-  pairs$index_val <-  abs(pairs$prop_diff)*(-1 *pairs$avg_dist_cluster*pairs$avg_dist_not_cluster)
-  
+
   # then we get the ordering index
-  idx <- order(pairs$index_val, decreasing = T)
+  idx <- order(pairs$score, decreasing = T)
   pairsord <- pairs[idx,]
   
   
   # start with the top
-  gp1 <- data.frame(k=1, g1=pairsord$gene_i_symbol[1], g2=pairsord$gene_j_symbol[1], 
-                    pd=pairsord$prop_diff[1], iv=pairsord$index_val[1])
+  gp1 <- data.frame(k=1, 
+                    g1=pairsord$gene_i_symbol[1], 
+                    g2=pairsord$gene_j_symbol[1], 
+                    pd=pairsord$prop_diff[1], 
+                    iv=pairsord$score[1])
   
   kmax <- nrow(pairsord)
-
   k <- 2 # decending the ordered pairs table
+  
   # for each row in the ordered pairs table
   while (pwant > 0 & k < kmax) {
     
     # proposal: add this pair
-    gpk <- data.frame(k=k, g1=pairsord$gene_i_symbol[k], g2=pairsord$gene_j_symbol[k], 
-                      pd=pairsord$prop_diff[k], iv=pairsord$index_val[k])
+    gpk <- data.frame(k=k, 
+                      g1=pairsord$gene_i_symbol[k], 
+                      g2=pairsord$gene_j_symbol[k], 
+                      pd=pairsord$prop_diff[k], 
+                      iv=pairsord$score[k])
   
     # check with previously selected pairs
-    corlist <- getcors(pairsord, array_f, gp1, gpk)  
+    corlist <- getcors(pairsord, dat_f, gp1, gpk)
     
     # if all correlation are low, accept the proposal
     if ( all( unlist( lapply(corlist, function(a) abs( a < 0.85 ))) ) )  {
@@ -189,18 +165,15 @@ save(genepairs, res0, file='../results/females_genepairs.rda')
 
 ```{r}
 
-array_m <- read_csv('../data/jive_training_array_data_M.csv.gz')
+#array_m <- read_csv('../data/jive_training_array_data_M.csv.gz')
 
-resdf_m <- read_csv('../results/feature_selection_table_male.csv')
+load('../data/M_processed_data.rda')
+resdf_m <- read_csv('../results/feature_selection_table_male.csv.gz')
 
 table(resdf_m$cluster)
 
-# drop the first column of row numbers
-array_m <- array_m[,-1]
-          
-head(colnames(array_m))
-tail(colnames(array_m))
-
+#print(tail(colnames(dat_m)))
+#[1]     "SCO2"         "Barcode"      "ClusterLabel"  "Sex"
 ```
 
 
@@ -210,43 +183,25 @@ Then we can bring in the gene symbols
 ```{r}
 
 # don't count the annotation columns at the end
-array_ncol <- ncol(array_m)-3
-
-# first get the min value for each gene in the array data
-minExprVals <- apply(array_m[,1:array_ncol], 2, min, na.rm=T)
-
-# first get the min value for each gene in the array data
-medExprVals <- apply(array_m[,1:array_ncol], 2, median, na.rm=T)
+array_ncol <- ncol(dat_m)-3
 
 # get gene IDs from the array
-genesi <- colnames(array_m)[resdf_m$gene_i]
-genesj <- colnames(array_m)[resdf_m$gene_j]
-
-# get the medians and mins out
-medi <- medExprVals[resdf_m$gene_i]
-medj <- medExprVals[resdf_m$gene_j]
-mini <- minExprVals[resdf_m$gene_i]
-minj <- minExprVals[resdf_m$gene_j]
+genesi <- colnames(dat_m)[resdf_m$gene_i]
+genesj <- colnames(dat_m)[resdf_m$gene_j]
 
 
 annotdf_m <- resdf_m
 annotdf_m['gene_i_symbol'] <- genesi
 annotdf_m['gene_j_symbol'] <- genesj
-annotdf_m['gene_i_min'] <- mini
-annotdf_m['gene_j_min'] <- minj
-annotdf_m['gene_i_med'] <- medi
-annotdf_m['gene_j_med'] <- medj
 
 table(annotdf_m$cluster)
 
 annotdf_m <- annotdf_m[(annotdf_m$gene_j_symbol != 'Barcode'),]
 
-
 score <- abs(annotdf_m$prop_diff)*(-1*annotdf_m$avg_dist_cluster*annotdf_m$avg_dist_not_cluster)
 annotdf_m$score <- score
 
-
-write.csv(annotdf_m, file = '../results/annotdf_m.csv')
+write.csv(annotdf_m, file = '../results/annotdf_m.csv.gz')
 ```
 
 Next we rank the gene pair selection metrics and take the best!
@@ -255,7 +210,7 @@ Next we rank the gene pair selection metrics and take the best!
 ```{r}
 
 ### number of pairs that we want.
-wanted_pairs <- 42
+wanted_pairs <- 24
 
 # by ordering the table by prop_diff * avg_dist_cluster * avg_dist_not_cluster
 # we are getting gene pairs with high proportions per cluster status
@@ -267,13 +222,13 @@ wanted_pairs <- 42
 # 3. reduce correlation across feature set, same gene picked many times..
 
 # return the corrleation with the previously selected pairs
-getcors <- function(pairordtable, array_df, selected, proposal) {
+getcors <- function(pairordtable, datatable, selected, proposal) {
   corlist <- list()
   for (k in 1:nrow(selected)) {
-    cor1 <- cor(array_df[,gp1$g1[k]], array_df[,gpk$g1]) # correlation with last pair
-    cor2 <- cor(array_df[,gp1$g1[k]], array_df[,gpk$g2]) # correlation with last pair
-    cor3 <- cor(array_df[,gp1$g2[k]], array_df[,gpk$g1]) # correlation with last pair
-    cor4 <- cor(array_df[,gp1$g2[k]], array_df[,gpk$g2]) # correlation with last pair
+    cor1 <- cor(datatable[,gp1$g1[k]], datatable[,gpk$g1]) # correlation with last pair
+    cor2 <- cor(datatable[,gp1$g1[k]], datatable[,gpk$g2]) # correlation with last pair
+    cor3 <- cor(datatable[,gp1$g2[k]], datatable[,gpk$g1]) # correlation with last pair
+    cor4 <- cor(datatable[,gp1$g2[k]], datatable[,gpk$g2]) # correlation with last pair
     corlist[[k]] <- c(cor1, cor2, cor3, cor4)
   }
   return(corlist)
@@ -301,37 +256,34 @@ for (this_cluster in c('cluster1','cluster2','cluster3','cluster4','cluster5')) 
   pwant <- wanted_pairs
   
   pairs <- annotdf_m[(annotdf_m$cluster == this_cluster),]
-  min_i_tval <- quantile(pairs$gene_i_min, na.rm=T)['50%']
-  min_j_tval <- quantile(pairs$gene_j_min, na.rm=T)['50%']
-  
-  
-  pairs <- pairs[(pairs$gene_i_min > min_i_tval) &
-                 (pairs$gene_j_min > min_j_tval),]
-  
-  # create the values that will be used to order pairs.
-  pairs$index_val <-  abs(pairs$prop_diff)*(-1*pairs$avg_dist_cluster*pairs$avg_dist_not_cluster)
-  
+
   # then we get the ordering index
-  idx <- order(pairs$index_val, decreasing = T)
+  idx <- order(pairs$score, decreasing = T)
   pairsord <- pairs[idx,]
   
   
   # start with the top
-  gp1 <- data.frame(k=1, g1=pairsord$gene_i_symbol[1], g2=pairsord$gene_j_symbol[1], 
-                    pd=pairsord$prop_diff[1], iv=pairsord$index_val[1])
+  gp1 <- data.frame(k=1, 
+                    g1=pairsord$gene_i_symbol[1], 
+                    g2=pairsord$gene_j_symbol[1], 
+                    pd=pairsord$prop_diff[1], 
+                    iv=pairsord$score[1])
   
   kmax <- nrow(pairsord)
-
   k <- 2 # decending the ordered pairs table
+  
   # for each row in the ordered pairs table
   while (pwant > 0 & k < kmax) {
     
     # proposal: add this pair
-    gpk <- data.frame(k=k, g1=pairsord$gene_i_symbol[k], g2=pairsord$gene_j_symbol[k], 
-                      pd=pairsord$prop_diff[k], iv=pairsord$index_val[k])
+    gpk <- data.frame(k=k, 
+                      g1=pairsord$gene_i_symbol[k], 
+                      g2=pairsord$gene_j_symbol[k], 
+                      pd=pairsord$prop_diff[k], 
+                      iv=pairsord$score[k])
   
     # check with previously selected pairs
-    corlist <- getcors(pairsord, array_m, gp1, gpk)  
+    corlist <- getcors(pairsord, dat_m, gp1, gpk)
     
     # if all correlation are low, accept the proposal
     if ( all( unlist( lapply(corlist, function(a) abs( a < 0.85 ))) ) )  {
@@ -355,165 +307,6 @@ save(genepairs, res0, file='../results/males_genepairs.rda')
 
 
 
-
-
-
-
-
-
-
-
-
-Some plots related to feature selection: 
-
-```{r}
-
-res0[['cluster1']]$cluster <- 'cluster1'
-res0[['cluster2']]$cluster <- 'cluster2'
-res0[['cluster3']]$cluster <- 'cluster3'
-res0[['cluster4']]$cluster <- 'cluster4'
-res0[['cluster5']]$cluster <- 'cluster5'
-
-res0[['cluster1']]$pairnum <- 1:nrow(res0[['cluster1']])
-res0[['cluster2']]$pairnum <- 1:nrow(res0[['cluster2']])
-res0[['cluster3']]$pairnum <- 1:nrow(res0[['cluster3']])
-res0[['cluster4']]$pairnum <- 1:nrow(res0[['cluster4']])
-res0[['cluster5']]$pairnum <- 1:nrow(res0[['cluster5']])
-
-df <- do.call('rbind', res0)
-
-ggplot(data=df, aes(x=pairnum,y=iv, color=cluster)) +
-  geom_point()
-
-
-```
-
-
-```{r}
-
-res0[['cluster1']]$cluster <- 'cluster1'
-res0[['cluster2']]$cluster <- 'cluster2'
-res0[['cluster3']]$cluster <- 'cluster3'
-res0[['cluster4']]$cluster <- 'cluster4'
-res0[['cluster5']]$cluster <- 'cluster5'
-
-res0[['cluster1']]$pairnum <- 1:nrow(res0[['cluster1']])
-res0[['cluster2']]$pairnum <- 1:nrow(res0[['cluster2']])
-res0[['cluster3']]$pairnum <- 1:nrow(res0[['cluster3']])
-res0[['cluster4']]$pairnum <- 1:nrow(res0[['cluster4']])
-res0[['cluster5']]$pairnum <- 1:nrow(res0[['cluster5']])
-
-df <- do.call('rbind', res0)
-
-ggplot(data=df, aes(x=pairnum,y=iv, color=cluster)) +
-  geom_point()
-
-
-```
-
-
-
-
-
-With the threshold held across clusters
-Show in New Window
-
-cluster1 cluster2 cluster3 cluster4 cluster5 
-       9        9      340     1168    21338 
-
-
-```{r}
-
-
-c3pairs <- annotdf_f[annotdf_f$cluster == 'cluster3',]
-
-qplot(x=prop_diff, y=avg_dist_not_cluster, data=c3pairs)
-
-summary(c1pairs$dist_ij_cluster)
-
-c1pairs <- c1pairs[c1pairs$dist_ij_cluster > 10,]
-
-idx <- order(c1pairs$prop_diff,decreasing = T)
-
-c1pairs[idx,]
-
-
-
-
-
-k <- 3
-iidx <- as.numeric( pairsord[k, 'gene_i'] )
-jidx <- as.numeric( pairsord[k, 'gene_j'] )
-
-valic <- array_f[array_f$ClusterLabel == 'cluster3', iidx] [[1]]
-valjc <- array_f[array_f$ClusterLabel == 'cluster3', jidx] [[1]]
-valid <- array_f[array_f$ClusterLabel != 'cluster3', iidx] [[1]]
-valjd <- array_f[array_f$ClusterLabel != 'cluster3', jidx] [[1]]
-
-boxplot(list(valic, valjc, valid, valjd))
-
-df <- data.frame(genei=c(valic, valid), genej=c(valjc, valjd))
-
-qplot(x=1:nrow(df), y=df$genei - df$genej, 
-      color=c( rep.int(1, length(valic)), rep.int(2, length(valid)) )
-      )
-
-```
-
-
-
-
-
-
-
-Some plots related to feature selection: 
-
-
-
-```{r}
-table(annotdf_f$cluster)
-
-
-c3pairs <- annotdf_f[annotdf_f$cluster == 'cluster3',]
-
-
-qplot(x=prop_diff, y=avg_dist_cluster, data=c3pairs)
-
-summary(c1pairs$dist_ij_cluster)
-
-
-c3pairs$index_val <-  abs(c3pairs$prop_diff)*(-1 *c3pairs$avg_dist_cluster*c3pairs$avg_dist_not_cluster)
-
-qplot(x=prop_diff, y=avg_dist_cluster, data=c3pairs, color= (index_val>1))
-
-
-hist(c3pairs$avg_dist_cluster)
-
-idx <- order(abs(c3pairs$avg_dist_cluster)*abs(c3pairs$prop_diff)*abs(c3pairs$avg_dist_not_cluster), decreasing = T)
-c3ord <- c3pairs[idx,]
-
-
-k <- 6 # which(c3ord$avg_dist_cluster > 0.5 & c3ord$prop_diff > 0.9)
-
-iidx <- as.numeric( c3ord[k, 'gene_i'] )
-jidx <- as.numeric( c3ord[k, 'gene_j'] )
-
-valic <- array_f[array_f$ClusterLabel == 'cluster3', iidx] [[1]]
-valjc <- array_f[array_f$ClusterLabel == 'cluster3', jidx] [[1]]
-valid <- array_f[array_f$ClusterLabel != 'cluster3', iidx] [[1]]
-valjd <- array_f[array_f$ClusterLabel != 'cluster3', jidx] [[1]]
-
-#boxplot(list(valic, valjc, valid, valjd))
-
-df <- data.frame(genei=c(valic, valid), genej=c(valjc, valjd), Cluster= c( rep.int('c3', length(valic)), rep.int('not_c3', length(valid)) ) )
-df$Expr_Diff <- df$genei - df$genej
-
-qplot(data=df, x=1:nrow(df), y=Expr_Diff, color=index_val)
-
-
-c3ord_sub <- c3ord[order(c3ord$prop_diff, decreasing = T), c(15,16,14,21)]
-
-```
 
 
 
