@@ -75,9 +75,9 @@ tempus.clin <- read.csv('../data/TEMPUS_Clinical_Data.csv.gz')
 
 ```{r}
 
-gpairs <- shorter_and_clean(genepairs, 10)  
+gpairs <- shorter_and_clean(genepairs, 11)  
 # clean the pairs
-genepairs_cl <- clean_genepairs_list(gset4, dat_f)  # only one with missing genes
+genepairs_cl <- clean_genepairs_list(gpairs, dat_f)  # only one with missing genes
 genepairs_cl <- clean_genepairs_list(gpairs, tmp_f)  # only one with missing genes
 
 
@@ -151,7 +151,7 @@ modfit <- survfit(Surv(Survival, CensoredCode)~BestCalls,data=resdf)
 surp <- ggsurvplot(modfit, pval = T, xlim=c(0,1700))
 surp
 
-ggsave("../figures/survplot_tempus_F.pdf", surp$plot, height = 8, width = 8)
+ggsave("../figures/survplot_tempus_F_init_genepairs.pdf", surp$plot, height = 8, width = 8)
 #ggsave("../figures/survplot_tempus_F_curated_genepairs.pdf", surp$plot, height = 8, width = 8)
 
 #ggsave("../figures/survplot_tempus_F_curated_genepairs.pdf", surp$plot, height = 8, width = 8)
@@ -247,9 +247,12 @@ resdf$cluster5 <- unlist(resdf$cluster5)
 resdf$CensoredCode <- ifelse(resdf$Censored == 0, yes=1, no=2)
 
 modfit <- survfit(Surv(Survival, CensoredCode)~BestCalls,data=resdf)
-ggsurvplot(modfit, pval = T, xlim=c(0,1700))
+surp <- ggsurvplot(modfit, pval = T, xlim=c(0,1700))
+surp
 
 ggsave("../figures/survplot_tempus_M_with_female_features.pdf", surp$plot, height = 8, width = 8)
+
+jdf <- inner_join(resdf, tempus.clin, by = join_by('SampleIDs'=='Study.ID'))
 
 ```
 

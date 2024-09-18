@@ -6,7 +6,7 @@ library(dplyr)
 
 
 load("E:/Work/GBM_clusters/GBM_JIVE_ANALYSIS/data/F_processed_data.rda")
-load('data/f_genepairs.rda')
+load('results/genepair_features/females_genepairs_curated_across_datasets.rda')
 
 
 load("E:/Work/GBM_clusters/GBM_JIVE_ANALYSIS/data/M_processed_data.rda")
@@ -89,7 +89,6 @@ pheatmap(mmat, cluster_rows = F, cluster_cols = F, scale = 'row'  )
 
 # Plotting expression changes for important feature-pairs
 
-# RBP1_X_BMP2
 plot_genepair <- function(a, b, data, res0, fileout) {
   genea <- unlist(data[,a])
   geneb <- unlist(data[,b])
@@ -193,5 +192,88 @@ geneb <- "DLL3"
 fileout <- 'figures/f_genepairs_tempus_PDPN_DLL3.pdf'
 fileout <- NA
 plot_genepair(genea,geneb,tmp_f,f_tmp_pred,fileout)
+
+
+#### plot in males ####
+
+plot_genepair_m <- function(a, b, data, fileout) {
+  genea <- unlist(data[,a])
+  geneb <- unlist(data[,b])
+  df <- data.frame(Barcode=data$Barcode, BestCalls=data$ClusterLabel, GeneA=genea, GeneB=geneb)
+  g <- ggplot(data = df, mapping = aes(x=BestCalls, y=log(GeneA/GeneB), colour = BestCalls)) +
+    geom_boxplot() + 
+    geom_jitter() +
+    ggtitle(paste0(a, " > ", b))
+  if (!is.na(fileout)) {
+    ggsave(file = fileout, plot = g, width = 5, height = 5)
+  } 
+  return(g)
+}
+
+
+genea <- "RBP1"
+geneb <- "BMP2"
+fileout <- 'figures/m_genepairs_tcga_RBP1_BMP2.pdf'
+fileout <- NA
+plot_genepair(genea,geneb,dat_m,fileout)
+
+
+genea <- "EMP3"
+geneb <- "FERMT1"
+fileout <- 'figures/m_genepairs_tcga_EMP3_FERMT1.pdf'
+fileout <- NA
+plot_genepair_m(genea,geneb,dat_m,fileout)
+
+
+
+
+##################################################################################
+# RNA vs array
+
+bs <- intersect(dat_f$Barcode, tcga_f$SampleBarcode)
+rownames(dat_f) <- dat_f$Barcode
+rownames(tcga_f) <- tcga_f$SampleBarcode
+
+gene <- "FERMT1"
+
+df <- data.frame(RNAseq=as.numeric(unlist(tcga_f[bs, gene])),
+                 Array=as.numeric(unlist(dat_f[bs, gene])),
+                 ClusterLabel=dat_f[bs,"ClusterLabel"])
+
+ggplot(data=df, aes(x=Array,y=Array/RNAseq, color=ClusterLabel)) +
+  geom_point(size = 2) +
+  xlab("Expression Array") +
+  ylab("Array / RNA-seq") +
+  ggtitle("Female gene expression ratio") +
+  theme_bw()
+
+ggsave("female_array_vs_rnaseq_Ratio.pdf", width = 5, height = 5)
+
+
+
+gene1 <- "FERMT1"
+gene2 <- "EMP3"
+
+df <- data.frame(RNAseq1=as.numeric(unlist(tcga_f[bs, gene1])),
+                 Array1=as.numeric(unlist(dat_f[bs, gene1])),
+                 RNAseq2=as.numeric(unlist(tcga_f[bs, gene2])),
+                 Array2=as.numeric(unlist(dat_f[bs, gene2])),
+                 ClusterLabel=dat_f[bs,"ClusterLabel"])
+
+ggplot(data=df, aes(x=Array1<Array2,y=RNAseq1<RNAseq2)) + #, #color=ClusterLabel)) +
+  geom_bin2d() +
+  stat_bin2d(geom = "text", aes(label = ..count..), binwidth = 1) +
+  scale_fill_gradient(low = "white", high = "red") +
+  xlab("Array, EMP3 > FERMT1") +
+  ylab("RNA-seq, EMP3 > FERMT1") +
+  ggtitle("Female gene expression ratio") +
+  theme_bw()
+
+ggsave("female_array_vs_rnaseq_RatioCount.pdf", width = 5, height = 5)
+
+
+
+
+
 
 

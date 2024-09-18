@@ -74,7 +74,7 @@ save_pheatmap_pdf <- function(x, filename, width=7, height=7) {
 
 ```{r}
 load('../data/F_processed_data.rda')
-load('../results/females_genepairs.rda')
+load('../results/genepair_features/females_genepairs.rda')
 
 
 # missign in val
@@ -103,7 +103,7 @@ genepairs_cl <- clean_genepairs_list(genepairs_cl, val_f)  # only one with missi
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
 params1 <- list(
-  max_depth=12,   # "height" of the tree, 6 is actually default. (xgboost parameter)
+               max_depth=12,   # "height" of the tree, 6 is actually default. (xgboost parameter)
                eta=0.45,        # this is the learning rate. smaller values slow it down,   (xgboost parameter)
                nrounds=24,     # number of rounds of training, lower numbers less overfitting (xgboost parameter)
                early_stopping_rounds=2,
@@ -160,7 +160,7 @@ resdf$CensoredCode <- ifelse(resdf$Censored == 0, yes=1, no=2)
 
 modfit <- survfit(Surv(Survival, CensoredCode)~BestCalls,data=resdf)
 ggsurvplot(modfit, pval = T, xlim=c(0,1700))
-ggsave('../figures/females_validation_survival_curve.pdf')
+ggsave('../figures/females_validation_survival_curve.pdf', width = 8, height = 8)
 #ggsave('../figures/females_validation_survival_curve_curated_genepairs.pdf', width = 8, height = 8)
 
 
@@ -353,7 +353,11 @@ resdf$CensoredCode <- ifelse(resdf$Censored == 0, yes=1, no=2)
 
 modfit <- survfit(Surv(Survival, CensoredCode)~BestCalls,data=resdf)
 ggsurvplot(modfit, pval = T, xlim=c(0,1700))
+
 ggsave('../figures/females_validation_survival_curve.pdf')
+
+
+ggsave('../figures/males_validation_survival_curve_with_females_curated_features.pdf', width = 8, height = 8)
 
 
 val_dat <- as.data.frame(mod_m$test_data)
