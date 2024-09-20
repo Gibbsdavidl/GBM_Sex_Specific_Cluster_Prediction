@@ -4,7 +4,7 @@ output: html_document
 ---
 
 ```{r}
-#devtools::install_github("gibbsdavidl/robencla", force = F)
+#devtools::install_github("gibbsdavidl/robencla", ref = 'v0.3.4')
 ```
 
 ```{r}

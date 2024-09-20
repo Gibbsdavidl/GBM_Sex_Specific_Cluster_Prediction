@@ -6,6 +6,8 @@ date: "2023-10-21"
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+#devtools::install_github("gibbsdavidl/robencla", ref = 'v0.3.4')
 ```
 
 
@@ -158,9 +160,14 @@ resdf$cluster5 <- unlist(resdf$cluster5)
 
 resdf$CensoredCode <- ifelse(resdf$Censored == 0, yes=1, no=2)
 
-modfit <- survfit(Surv(Survival, CensoredCode)~BestCalls,data=resdf)
-ggsurvplot(modfit, pval = T, xlim=c(0,1700))
-ggsave('../figures/females_validation_survival_curve.pdf', width = 8, height = 8)
+resdf$Months <- round(resdf$Survival / 30)
+
+
+modfit <- survfit(Surv(Months, CensoredCode)~BestCalls,data=resdf)
+ggsurvplot(modfit, pval = T, xlab="Months" ,pval.coord = c(1, 0))
+#ggsurvplot(modfit, pval = T, xlim=c(0,1700))
+
+ggsave('../figures/females_validation_survival_curve_v2.pdf', width = 5, height = 5)
 #ggsave('../figures/females_validation_survival_curve_curated_genepairs.pdf', width = 8, height = 8)
 
 
@@ -351,13 +358,15 @@ resdf$cluster5 <- unlist(resdf$cluster5)
 
 resdf$CensoredCode <- ifelse(resdf$Censored == 0, yes=1, no=2)
 
+
+
 modfit <- survfit(Surv(Survival, CensoredCode)~BestCalls,data=resdf)
 ggsurvplot(modfit, pval = T, xlim=c(0,1700))
 
-ggsave('../figures/females_validation_survival_curve.pdf')
+ggsave('../figures/males_validation_survival_curve_v2.pdf')
 
 
-ggsave('../figures/males_validation_survival_curve_with_females_curated_features.pdf', width = 8, height = 8)
+#ggsave('../figures/males_validation_survival_curve_with_females_curated_features.pdf', width = 8, height = 8)
 
 
 val_dat <- as.data.frame(mod_m$test_data)

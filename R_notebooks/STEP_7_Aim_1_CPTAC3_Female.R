@@ -1,3 +1,6 @@
+
+#devtools::install_github("gibbsdavidl/robencla", ref = 'v0.3.4')
+
 library(tidyverse)
 library(robencla)
 library(survival)

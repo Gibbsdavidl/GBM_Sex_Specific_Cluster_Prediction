@@ -13,7 +13,7 @@ Questions: Are there missing genes, in array, that are present in RNA-seq, that 
 
 
 ```{r}
-devtools::install_github("gibbsdavidl/robencla", force = T)
+#devtools::install_github("gibbsdavidl/robencla", ref = 'v0.3.4')
 ```
 
 ```{r}

@@ -13,7 +13,7 @@ Questions: Are there missing genes, in array, that are present in RNA-seq, that 
 
 
 ```{r}
-#devtools::install_github("gibbsdavidl/robencla", force = F)
+##devtools::install_github("gibbsdavidl/robencla", ref = 'v0.3.4')
 ```
 
 ```{r}
@@ -68,24 +68,26 @@ shorter_and_clean <- function(pairlist, n) {
 ```{r}
 
 load('../data/F_processed_data.rda')
-load('../results/females_genepairs.rda')
+load('../results/genepair_features/females_genepairs.rda')
+load('../results/genepair_features/females_genepairs_rna_refined.rda')
+
 
 tempus.clin <- read.csv('../data/TEMPUS_Clinical_Data.csv.gz')
 ```
 
 ```{r}
 
-gpairs <- shorter_and_clean(genepairs, 11)  
+gpairs <- shorter_and_clean(genepairs, 10)  
 # clean the pairs
 genepairs_cl <- clean_genepairs_list(gpairs, dat_f)  # only one with missing genes
 genepairs_cl <- clean_genepairs_list(gpairs, tmp_f)  # only one with missing genes
 
 
 # what if ...
-dat_f$ClusterLabel2 <- ifelse(dat_f$ClusterLabel == 'cluster3', yes = 'C3', no='notC3')
-c3_pairs <- list()
-c3_pairs[['C3']] <- genepairs_cl$cluster3
-c3_pairs[['notC3']] <- c(genepairs_cl$cluster1, genepairs_cl$cluster2, genepairs_cl$cluster4, genepairs_cl$cluster5)
+#dat_f$ClusterLabel2 <- ifelse(dat_f$ClusterLabel == 'cluster3', yes = 'C3', no='notC3')
+#c3_pairs <- list()
+#c3_pairs[['C3']] <- genepairs_cl$cluster3
+#c3_pairs[['notC3']] <- c(genepairs_cl$cluster1, genepairs_cl$cluster2, genepairs_cl$cluster4, genepairs_cl$cluster5)
 
 
 # xgboost parameters to pass to each sub-classifier in the ensembles
@@ -140,21 +142,28 @@ resdf$cluster2 <- unlist(resdf$cluster2)
 resdf$cluster3 <- unlist(resdf$cluster3)
 resdf$cluster4 <- unlist(resdf$cluster4)
 resdf$cluster5 <- unlist(resdf$cluster5)
-resdf$C3 <- unlist(resdf$C3)
-resdf$notC3 <- unlist(resdf$notC3)
+#resdf$C3 <- unlist(resdf$C3)
+#resdf$notC3 <- unlist(resdf$notC3)
 
 #r2 <- inner_join(resdf, tempus.clin, join_by(SampleIDs==Study.ID) )
 
 resdf$CensoredCode <- ifelse(resdf$Censored == 'alive', yes=1, no=2)
+resdf$Months <- round(resdf$Survival / 30)
 
 modfit <- survfit(Surv(Survival, CensoredCode)~BestCalls,data=resdf)
 surp <- ggsurvplot(modfit, pval = T, xlim=c(0,1700))
 surp
 
-ggsave("../figures/survplot_tempus_F_init_genepairs.pdf", surp$plot, height = 8, width = 8)
+modfit <- survfit(Surv(Months, CensoredCode)~BestCalls,data=resdf)
+surp <- ggsurvplot(modfit, pval = T, pval.coord = c(1, 0))
+surp
+
+
+ggsave("../figures/survplot_tempus_F_genepairs_refined_rna_V2.pdf", surp$plot, height = 8, width = 8)
+#ggsave("../figures/survplot_tempus_F_init_genepairs.pdf", surp$plot, height = 8, width = 8)
+#ggsave("../figures/survplot_tempus_F_curated_genepairs.pdf", surp$plot, height = 8, width = 8)
 #ggsave("../figures/survplot_tempus_F_curated_genepairs.pdf", surp$plot, height = 8, width = 8)
 
-#ggsave("../figures/survplot_tempus_F_curated_genepairs.pdf", surp$plot, height = 8, width = 8)
 
 save(r2, file='../results/Tempus_F_pred_results_table_binary_C3.rda')
 ```
@@ -170,7 +179,8 @@ MALES
 ```{r}
 
 load('../data/M_processed_data.rda')
-load('../results/males_genepairs.rda')
+load('../results/genepair_features/males_genepairs.rda')
+#load('../results/genepair_features/males_genepairs_val_refined.rda')
 
 
 tempus.clin <- read.csv('../data/TEMPUS_Clinical_Data.csv.gz')
@@ -179,7 +189,7 @@ tempus.clin <- read.csv('../data/TEMPUS_Clinical_Data.csv.gz')
 ```{r}
 
 
-gpairs <- shorter_and_clean(genepairs, 10)  
+gpairs <- shorter_and_clean(genepairs, 12)  
 # clean the pairs
 genepairs_cl <- clean_genepairs_list(gpairs, dat_m)  # only one with missing genes
 genepairs_cl <- clean_genepairs_list(gpairs, tmp_m)  # only one with missing genes
@@ -250,7 +260,9 @@ modfit <- survfit(Surv(Survival, CensoredCode)~BestCalls,data=resdf)
 surp <- ggsurvplot(modfit, pval = T, xlim=c(0,1700))
 surp
 
-ggsave("../figures/survplot_tempus_M_with_female_features.pdf", surp$plot, height = 8, width = 8)
+ggsave("../figures/survplot_tempus_M_with_genepairs_v2.pdf", surp$plot, height = 8, width = 8)
+
+#ggsave("../figures/survplot_tempus_M_with_female_features.pdf", surp$plot, height = 8, width = 8)
 
 jdf <- inner_join(resdf, tempus.clin, by = join_by('SampleIDs'=='Study.ID'))
 

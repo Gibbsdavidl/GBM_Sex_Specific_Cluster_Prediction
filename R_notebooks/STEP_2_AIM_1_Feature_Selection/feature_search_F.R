@@ -1,4 +1,4 @@
-
+#devtools::install_github("gibbsdavidl/robencla", ref = 'v0.3.4')
 
 #!/usr/bin/env Rscript
 args = c('1', '0.005') #commandArgs(trailingOnly=TRUE)

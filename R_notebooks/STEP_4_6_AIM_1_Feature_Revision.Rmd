@@ -8,6 +8,8 @@ in the validation studies. We will try to revise the selection to find
 concordance.
 
 ```{r}
+#devtools::install_github("gibbsdavidl/robencla", ref = 'v0.3.4')
+
 library(tidyverse)
 library(robencla)
 library(survminer)
@@ -1071,14 +1073,15 @@ First training the full model with all male data.
 
 # see data set up
 load('../data/M_processed_data.rda')
-load('../results/males_genepairs_rna.rda')
+#load('../results/males_genepairs_rna.rda')
+load('../results/genepair_features/males_genepairs_val_refined.rda')
 
 ```
 
 
 ```{r}
 
-gpairs <- shorter_and_clean(mgenepairs$val, 24)
+gpairs <- shorter_and_clean(genepairs_val, 24)
 genepairs_cl <- clean_genepairs_list(gpairs, dat_m)  # only one with missing genes
 genepairs_cl <- clean_genepairs_list(genepairs_cl, val_m)  # only one with missing genes
 
@@ -1117,8 +1120,8 @@ mod_m$predict(data_frame = val_m,
 
 
 table(mod_m$results()$BestCall)
-#cluster1 cluster2 cluster3 cluster5 
-#      18      199       83      236 
+#cluster1 cluster2 cluster3 cluster4 cluster5 
+#      41      156       84       52      203 
       
 # get the results table
 resdf <- mod_m$results()
@@ -1134,10 +1137,14 @@ resdf$cluster4 <- unlist(resdf$cluster4)
 resdf$cluster5 <- unlist(resdf$cluster5)
 
 resdf$CensoredCode <- ifelse(resdf$Censored == 0, yes=1, no=2)
+resdf$Months <- round(resdf$Survival / 30)
 
-modfit <- survfit(Surv(Survival, CensoredCode)~BestCalls,data=resdf)
-ggsurvplot(modfit, pval = T, xlim=c(0,1700))
-ggsave('../figures/males_validation_survival_curve_refined_features.pdf')
+
+modfit <- survfit(Surv(Months, CensoredCode)~BestCalls,data=resdf)
+ggsurvplot(modfit, pval = T, xlab="Months",pval.coord = c(1, 0),)
+#modfit <- survfit(Surv(Survival, CensoredCode)~BestCalls,data=resdf)
+#ggsurvplot(modfit, pval = T, xlim=c(0,1700))
+ggsave('../figures/males_validation_survival_curve_refined_features_v2.pdf',width = 8,height = 8)
 
 
 val_dat <- as.data.frame(mod_m$test_data)
